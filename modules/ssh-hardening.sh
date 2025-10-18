@@ -226,10 +226,21 @@ create_ssh_user() {
         return 1
     fi
 
-    # Add to sudo group
-    if ask_yes_no "Add '$username' to sudo group?" "y"; then
+    # Ask about sudo access
+    echo ""
+    log_info "User access level options:"
+    echo "  1) Normal user (recommended - use 'su' to become root)"
+    echo "  2) Sudo user (can use 'sudo' command)"
+    echo ""
+    read_prompt "Choice [1]: " sudo_choice "1"
+
+    if [[ "$sudo_choice" == "2" ]]; then
         usermod -aG sudo "$username"
         log_success "User added to sudo group"
+        log_info "User can use: sudo -i (to become root)"
+    else
+        log_success "User created as normal user"
+        log_info "User can use: su - (to become root with root password)"
     fi
 
     # Setup SSH directory
@@ -495,6 +506,12 @@ apply_ssh_quick_hardening() {
             # Backup config before restart
             backup_config "/etc/ssh/sshd_config"
 
+            # Reload systemd daemon to recognize config changes
+            log_info "Reloading systemd daemon..."
+            systemctl daemon-reload >> /var/log/ubuntu-setup.log 2>&1
+
+            # Restart SSH service
+            log_info "Restarting SSH service..."
             systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
 
             # Wait for service to start
