@@ -8,6 +8,13 @@
 configure_ssh_hardening() {
     log_step "SSH Security Hardening..."
 
+    # Detect SSH service name (ssh on Ubuntu, sshd on other systems)
+    local ssh_service="ssh"
+    if systemctl list-unit-files | grep -q "^sshd.service"; then
+        ssh_service="sshd"
+    fi
+    log_info "Detected SSH service: $ssh_service"
+
     local sshd_config="/etc/ssh/sshd_config"
     backup_config "$sshd_config"
 
@@ -94,21 +101,21 @@ configure_ssh_hardening() {
         echo ""
 
         if ask_yes_no "Restart SSH service?" "n"; then
-            systemctl restart sshd >> /var/log/ubuntu-setup.log 2>&1
+            systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
 
             # Wait for service to start
             sleep 2
 
-            if systemctl is-active --quiet sshd; then
+            if systemctl is-active --quiet "$ssh_service"; then
                 log_success "SSH service restarted successfully"
                 log_warning "Test your SSH connection NOW in a new terminal!"
                 return 0
             else
                 log_error "SSH service failed to start"
                 log_info "Service status:"
-                systemctl status sshd --no-pager --lines=20
+                systemctl status "$ssh_service" --no-pager --lines=20
                 log_info "Recent logs:"
-                journalctl -u sshd -n 30 --no-pager
+                journalctl -u "$ssh_service" -n 30 --no-pager
                 log_info "Configuration test:"
                 sshd -t 2>&1
 
@@ -117,8 +124,8 @@ configure_ssh_hardening() {
                 if [[ -f "$backup_file" ]]; then
                     cp "$backup_file" "$sshd_config"
                     log_info "Restored from: $backup_file"
-                    systemctl restart sshd >> /var/log/ubuntu-setup.log 2>&1
-                    if systemctl is-active --quiet sshd; then
+                    systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
+                    if systemctl is-active --quiet "$ssh_service"; then
                         log_success "SSH service restored successfully"
                     else
                         log_error "Failed to restore SSH service"
@@ -129,7 +136,7 @@ configure_ssh_hardening() {
                 return 1
             fi
         else
-            log_info "SSH not restarted. Apply manually: sudo systemctl restart sshd"
+            log_info "SSH not restarted. Apply manually: sudo systemctl restart $ssh_service"
         fi
     else
         log_error "SSH configuration test failed"
@@ -493,6 +500,12 @@ manage_ssh_keys() {
 }
 
 change_ssh_port() {
+    # Detect SSH service name
+    local ssh_service="ssh"
+    if systemctl list-unit-files | grep -q "^sshd.service"; then
+        ssh_service="sshd"
+    fi
+
     local sshd_config="/etc/ssh/sshd_config"
     local current_port=$(grep "^Port" "$sshd_config" | awk '{print $2}')
     current_port=${current_port:-22}
