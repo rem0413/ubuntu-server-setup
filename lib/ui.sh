@@ -180,12 +180,14 @@ ask_yes_no() {
 
     local prompt
     if [[ "$default" == "y" ]]; then
-        prompt="(Y/n)"
+        prompt="[Y/n]"
     else
-        prompt="(y/N)"
+        prompt="[y/N]"
     fi
 
-    echo -n "$question $prompt: "
+    echo ""
+    echo "$question"
+    printf "%s: " "$prompt"
 
     local response=""
     read -r response 2>/dev/null || response="$default"
@@ -205,18 +207,28 @@ get_input() {
     local secret="${3:-false}"
     local response=""
 
+    echo ""
+    echo "========================================="
+
     if [[ "$secret" == "true" ]]; then
-        echo -n "$prompt: "
+        echo "$prompt"
+        echo "========================================="
+        printf "Enter (hidden): "
         read -s response 2>/dev/null || response=""
         echo ""
     else
-        echo -n "$prompt"
+        echo "$prompt"
         if [[ -n "$default" ]]; then
-            echo -n " [$default]"
+            echo "Default: $default"
+            echo "Press Enter to use default, or type new value"
+        else
+            echo "Required - please enter a value"
         fi
-        echo -n ": "
+        echo "========================================="
+        printf "> "
         read -r response 2>/dev/null || response=""
     fi
 
+    echo ""
     echo "${response:-$default}"
 }
