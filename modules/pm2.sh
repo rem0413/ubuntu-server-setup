@@ -89,8 +89,7 @@ install_pm2() {
     local actual_user="${SUDO_USER:-$USER}"
 
     if [[ "$actual_user" == "root" ]]; then
-        log_warning "PM2 installed globally"
-        log_info "PM2 startup script should be configured per user"
+        log_warning "PM2 installed globally - startup should be configured per user"
         log_info ""
         log_info "To configure PM2 startup for a user, run as that user:"
         log_info "  su - username"
@@ -99,8 +98,18 @@ install_pm2() {
         log_info "  pm2 save"
         log_info ""
     else
-        if ask_yes_no "Setup PM2 startup script for user '$actual_user'?" "y"; then
-            setup_pm2_startup
+        if ask_yes_no "Setup PM2 startup script for user '$actual_user'?" "n"; then
+            setup_pm2_startup || {
+                log_warning "PM2 startup configuration failed or skipped"
+                log_info "You can configure it manually later:"
+                log_info "  su - $actual_user"
+                log_info "  pm2 startup"
+                log_info "  # Run the command it shows"
+                log_info "  pm2 save"
+            }
+        else
+            log_info "PM2 startup configuration skipped"
+            log_info "Configure later with: pm2 startup"
         fi
     fi
 
@@ -174,7 +183,21 @@ setup_pm2_startup() {
 
     # Generate startup script
     log_info "Generating PM2 startup command..."
-    local startup_output=$(sudo -u "$actual_user" pm2 startup "$startup_system" -u "$actual_user" --hp $(eval echo ~$actual_user) 2>&1)
+
+    # Get npm bin path and ensure pm2 is accessible
+    local npm_bin=$(npm bin -g 2>/dev/null || echo "/usr/local/bin")
+    local pm2_path=$(which pm2 2>/dev/null || echo "$npm_bin/pm2")
+
+    if [[ ! -f "$pm2_path" ]]; then
+        log_error "PM2 executable not found at: $pm2_path"
+        log_info "PM2 might not be properly installed or in PATH"
+        return 1
+    fi
+
+    log_info "Using PM2 at: $pm2_path"
+
+    # Run pm2 startup with explicit path
+    local startup_output=$(sudo -u "$actual_user" env PATH="$npm_bin:$PATH" "$pm2_path" startup "$startup_system" -u "$actual_user" --hp $(eval echo ~$actual_user) 2>&1)
     local startup_cmd=$(echo "$startup_output" | grep "sudo env")
 
     if [[ -n "$startup_cmd" ]]; then
@@ -190,7 +213,7 @@ setup_pm2_startup() {
 
             # Save PM2 process list
             log_info "Saving PM2 process list..."
-            sudo -u "$actual_user" pm2 save >> "$LOG_FILE" 2>&1
+            sudo -u "$actual_user" env PATH="$npm_bin:$PATH" "$pm2_path" save >> "$LOG_FILE" 2>&1
             if [[ $? -eq 0 ]]; then
                 log_success "PM2 process list saved"
             else
