@@ -230,6 +230,11 @@ EOF
                 ;;
         esac
         echo ""
+
+        # Offer Cloudflare Real IP configuration
+        if ask_yes_no "Configure Cloudflare Real IP?" "n"; then
+            configure_cloudflare_realip
+        fi
     else
         log_error "Nginx configuration test failed"
         return 1
