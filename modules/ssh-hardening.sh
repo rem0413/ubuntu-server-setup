@@ -23,15 +23,14 @@ configure_ssh_hardening() {
     echo "  6) Cancel"
     echo ""
 
-    read -p "Choice [1]: " choice
-    choice=${choice:-1}
+    read_prompt "Choice [1]: " choice "1"
 
     case $choice in
         1)
             # Get current user
             local current_user="${SUDO_USER:-$USER}"
             if [[ "$current_user" == "root" ]]; then
-                read -p "Non-root username for SSH access: " current_user
+                read_prompt "Non-root username for SSH access: " current_user ""
                 if [[ -z "$current_user" ]]; then
                     log_error "Username is required"
                     return 1
@@ -56,7 +55,7 @@ configure_ssh_hardening() {
         3)
             local current_user="${SUDO_USER:-$USER}"
             if [[ "$current_user" == "root" ]]; then
-                read -p "Username for SSH key management: " current_user
+                read_prompt "Username for SSH key management: " current_user ""
                 if [[ -z "$current_user" ]] || ! id "$current_user" &>/dev/null; then
                     log_error "Valid username required"
                     return 1
@@ -117,7 +116,7 @@ configure_ssh_hardening() {
 
 create_ssh_user_interactive() {
     echo ""
-    read -p "Enter username: " new_user
+    read_prompt "Enter username: " new_user ""
 
     if [[ -z "$new_user" ]]; then
         log_error "Username is required"
@@ -177,7 +176,8 @@ create_ssh_user() {
         echo ""
         echo "========================================="
         echo ""
-        read -p "Press Enter after saving the password..."
+        printf "Press Enter after saving the password..." >/dev/tty
+        read -r </dev/tty
         log_success "Password set"
     else
         log_error "Failed to set password"
@@ -200,7 +200,7 @@ create_ssh_user() {
     if ask_yes_no "Add SSH public key for '$username'?" "y"; then
         echo ""
         log_info "Paste your SSH public key (starts with ssh-rsa or ssh-ed25519):"
-        read -r pubkey
+        read -r pubkey </dev/tty
 
         if [[ -n "$pubkey" ]]; then
             echo "$pubkey" > "/home/$username/.ssh/authorized_keys"
@@ -268,7 +268,7 @@ configure_existing_user() {
     if ask_yes_no "Add SSH public key for '$username'?" "y"; then
         echo ""
         log_info "Paste your SSH public key:"
-        read -r pubkey
+        read -r pubkey </dev/tty
 
         if [[ -n "$pubkey" ]]; then
             echo "$pubkey" >> "/home/$username/.ssh/authorized_keys"
@@ -393,13 +393,13 @@ manage_ssh_keys() {
     echo "  4) Generate new SSH key pair"
     echo ""
 
-    read -p "Choice: " key_choice
+    read_prompt "Choice: " key_choice ""
 
     case $key_choice in
         1)
             echo ""
             log_info "Paste your public key (starts with ssh-rsa or ssh-ed25519):"
-            read -r pubkey
+            read -r pubkey </dev/tty
 
             if [[ -z "$pubkey" ]]; then
                 log_error "No key provided"
@@ -435,7 +435,7 @@ manage_ssh_keys() {
             log_info "Current keys:"
             cat -n "/home/$current_user/.ssh/authorized_keys"
             echo ""
-            read -p "Enter line number to remove: " line_num
+            read_prompt "Enter line number to remove: " line_num ""
 
             if [[ "$line_num" =~ ^[0-9]+$ ]]; then
                 sed -i "${line_num}d" "/home/$current_user/.ssh/authorized_keys"
@@ -448,8 +448,7 @@ manage_ssh_keys() {
         4)
             echo ""
             log_info "Generating SSH key pair..."
-            read -p "Key name [id_ed25519]: " keyname
-            keyname=${keyname:-id_ed25519}
+            read_prompt "Key name [id_ed25519]: " keyname "id_ed25519"
 
             sudo -u "$current_user" ssh-keygen -t ed25519 -f "/home/$current_user/.ssh/$keyname" -C "$current_user@$(hostname)"
 
@@ -472,8 +471,7 @@ change_ssh_port() {
 
     log_info "Current SSH port: $current_port"
 
-    read -p "New SSH port [22]: " new_port
-    new_port=${new_port:-22}
+    read_prompt "New SSH port [22]: " new_port "22"
 
     if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [[ "$new_port" -lt 1024 ]] || [[ "$new_port" -gt 65535 ]]; then
         log_error "Invalid port number (must be 1024-65535)"

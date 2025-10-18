@@ -146,8 +146,8 @@ configure_postgresql_user() {
         echo ""
 
         # Wait for user to copy
-        echo -n "Press Enter after you have saved these credentials..."
-        read -r
+        printf "Press Enter after you have saved these credentials..." >/dev/tty
+        read -r </dev/tty
 
         log_success "PostgreSQL user created: $db_user"
 

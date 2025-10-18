@@ -20,8 +20,7 @@ install_redis() {
     echo "  2) Redis Cluster (3 master + 3 replica minimum)"
     echo ""
 
-    read -p "Select mode [1]: " mode_choice
-    mode_choice=${mode_choice:-1}
+    read_prompt "Select mode [1]: " mode_choice "1"
 
     if [[ "$mode_choice" == "2" ]]; then
         SETUP_CLUSTER=true
@@ -29,8 +28,7 @@ install_redis() {
 
     # Port configuration
     echo ""
-    read -p "Redis port [6379]: " port_input
-    REDIS_PORT=${port_input:-6379}
+    read_prompt "Redis port [6379]: " REDIS_PORT "6379"
 
     # Validate port
     if [[ ! "$REDIS_PORT" =~ ^[0-9]+$ ]] || [[ "$REDIS_PORT" -lt 1024 ]] || [[ "$REDIS_PORT" -gt 65535 ]]; then

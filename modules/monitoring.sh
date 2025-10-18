@@ -34,8 +34,8 @@ install_monitoring() {
     echo "Note: Exporters work standalone and can export to any monitoring system"
     echo ""
 
-    printf "Enter selections (e.g., 1 2 3 or just 3 for exporter only): "
-    read -r selections
+    printf "Enter selections (e.g., 1 2 3 or just 3 for exporter only): " >/dev/tty
+    read -r selections </dev/tty
 
     case "$selections" in
         q|Q)

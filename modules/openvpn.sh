@@ -33,7 +33,7 @@ install_openvpn() {
     fi
 
     echo ""
-    read -p "Select option: " openvpn_choice
+    read_prompt "Select option: " openvpn_choice ""
 
     if [[ "$server_exists" == false ]]; then
         case $openvpn_choice in
@@ -77,7 +77,7 @@ setup_openvpn_server() {
     local server_ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | head -1)
 
     if [[ -z "$server_ip" ]]; then
-        read -p "Server public IP: " server_ip
+        read_prompt "Server public IP: " server_ip ""
         if [[ -z "$server_ip" ]]; then
             log_error "Server IP is required"
             return 1
@@ -87,19 +87,16 @@ setup_openvpn_server() {
     log_success "Server IP: $server_ip"
 
     # Get configuration details
-    read -p "OpenVPN port [1194]: " vpn_port
-    vpn_port=${vpn_port:-1194}
+    read_prompt "OpenVPN port [1194]: " vpn_port "1194"
 
-    read -p "Protocol (udp/tcp) [udp]: " vpn_protocol
-    vpn_protocol=${vpn_protocol:-udp}
+    read_prompt "Protocol (udp/tcp) [udp]: " vpn_protocol "udp"
 
     echo ""
     echo "DNS server:"
     echo "  1) Current system DNS"
     echo "  2) Google DNS (8.8.8.8)"
     echo "  3) Cloudflare DNS (1.1.1.1)"
-    read -p "Choice [1]: " dns_choice
-    dns_choice=${dns_choice:-1}
+    read_prompt "Choice [1]: " dns_choice "1"
 
     local dns1 dns2
     case $dns_choice in
@@ -335,7 +332,7 @@ add_openvpn_client() {
         return 1
     fi
 
-    read -p "Client name (e.g., laptop, phone, john-laptop): " client_name
+    read_prompt "Client name (e.g., laptop, phone, john-laptop): " client_name ""
 
     if [[ -z "$client_name" ]]; then
         log_error "Client name is required"
@@ -467,7 +464,7 @@ revoke_openvpn_client() {
 
     local easy_rsa_dir="/etc/openvpn/easy-rsa"
 
-    read -p "Client name to revoke: " client_name
+    read_prompt "Client name to revoke: " client_name ""
 
     if [[ -z "$client_name" ]]; then
         log_error "Client name is required"

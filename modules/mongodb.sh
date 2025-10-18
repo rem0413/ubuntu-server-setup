@@ -124,8 +124,8 @@ configure_mongodb_user() {
         echo ""
 
         # Wait for user to copy
-        echo -n "Press Enter after you have saved these credentials..."
-        read -r
+        printf "Press Enter after you have saved these credentials..." >/dev/tty
+        read -r </dev/tty
 
         log_success "MongoDB admin user created: $admin_user"
 

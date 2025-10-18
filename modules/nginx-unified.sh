@@ -33,7 +33,7 @@ install_nginx() {
     fi
 
     echo ""
-    read -p "Select option: " nginx_choice
+    read_prompt "Select option: " nginx_choice ""
 
     if [[ "$nginx_installed" == false ]]; then
         case $nginx_choice in
@@ -106,8 +106,7 @@ configure_nginx_advanced() {
     echo "  7) Skip"
     echo ""
 
-    read -p "Choice [1]: " config_mode
-    config_mode=${config_mode:-1}
+    read_prompt "Choice [1]: " config_mode "1"
 
     case $config_mode in
         1|2|3|4|5|6)

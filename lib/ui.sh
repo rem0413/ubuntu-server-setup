@@ -244,3 +244,21 @@ get_input() {
     # Return the value (this goes to stdout for capture)
     echo "${response:-$default}"
 }
+
+# Simple read with prompt (replacement for read -p)
+# Usage: read_prompt "Enter value: " variable_name [default]
+read_prompt() {
+    local prompt="$1"
+    local varname="$2"
+    local default="$3"
+    local response=""
+
+    # Show prompt to terminal
+    printf "%s" "$prompt" >/dev/tty
+
+    # Read from terminal
+    read -r response </dev/tty 2>/dev/null || response="$default"
+
+    # Assign to variable name
+    eval "$varname='${response:-$default}'"
+}

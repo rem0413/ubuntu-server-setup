@@ -22,9 +22,7 @@ install_nodejs() {
     echo "  2) Current (21.x)"
     echo "  3) Previous LTS (18.x)"
     echo ""
-    echo -n "Choice [1]: "
-    read -r node_choice
-    node_choice=${node_choice:-1}
+    read_prompt "Choice [1]: " node_choice "1"
 
     local node_version
     case $node_choice in
