@@ -92,6 +92,13 @@ configure_postgresql_user() {
     local pg_port="$1"
     log_info "Configuring PostgreSQL user..."
 
+    # Verify PostgreSQL service is running
+    if ! systemctl is-active --quiet postgresql; then
+        log_error "PostgreSQL service is not running"
+        log_info "Try: systemctl status postgresql"
+        return 1
+    fi
+
     local db_user=""
     read_prompt "Database username [postgres]: " db_user "postgres"
 
@@ -102,12 +109,24 @@ configure_postgresql_user() {
     # Create or update PostgreSQL user
     if [[ "$db_user" == "postgres" ]]; then
         # postgres user already exists, just set password
-        sudo -u postgres psql -p "$pg_port" -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" >> "$LOG_FILE" 2>&1
+        log_info "Setting password for user '$db_user'..."
+        local error_output=$(sudo -u postgres psql -p "$pg_port" -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" 2>&1)
         local create_result=$?
+
+        if [[ $create_result -ne 0 ]]; then
+            echo "$error_output" >> "$LOG_FILE"
+            log_error "PostgreSQL error: $error_output"
+        fi
     else
         # Create new user
-        sudo -u postgres psql -p "$pg_port" -c "CREATE USER $db_user WITH PASSWORD '$db_pass' SUPERUSER CREATEDB CREATEROLE;" >> "$LOG_FILE" 2>&1
+        log_info "Creating user '$db_user'..."
+        local error_output=$(sudo -u postgres psql -p "$pg_port" -c "CREATE USER $db_user WITH PASSWORD '$db_pass' SUPERUSER CREATEDB CREATEROLE;" 2>&1)
         local create_result=$?
+
+        if [[ $create_result -ne 0 ]]; then
+            echo "$error_output" >> "$LOG_FILE"
+            log_error "PostgreSQL error: $error_output"
+        fi
     fi
 
     if [[ $create_result -eq 0 ]]; then
