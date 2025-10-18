@@ -21,10 +21,28 @@ install_security() {
         ufw status numbered
         echo ""
 
-        # Offer to add ports
-        if ask_yes_no "Add/manage firewall ports?" "y"; then
-            manage_ufw_ports
-        fi
+        # Offer menu for UFW management
+        echo ""
+        echo -e "${BOLD}UFW Management:${NC}"
+        echo ""
+        echo "  1) Add/manage firewall ports"
+        echo "  2) Setup IP whitelist (restrict access to specific IPs)"
+        echo "  3) Skip"
+        echo ""
+
+        read_prompt "Choice [1]: " ufw_choice "1"
+
+        case $ufw_choice in
+            1)
+                manage_ufw_ports
+                ;;
+            2)
+                setup_ufw_whitelist
+                ;;
+            *)
+                log_info "UFW management skipped"
+                ;;
+        esac
     fi
 
     # Install Fail2ban
@@ -476,6 +494,189 @@ EOF
     else
         log_error "Fail2ban failed to start. Check logs: journalctl -u fail2ban -n 20"
     fi
+
+    return 0
+}
+
+# Setup UFW IP Whitelist with default deny
+setup_ufw_whitelist() {
+    log_step "UFW IP Whitelist Configuration"
+
+    echo ""
+    echo -e "${YELLOW}${BOLD}⚠ WARNING - POTENTIAL LOCKOUT RISK ⚠${NC}"
+    echo -e "${RED}This feature will:${NC}"
+    echo -e "  1. Change UFW default policy to DENY all incoming"
+    echo -e "  2. Only allow connections from whitelisted IPs"
+    echo -e "  3. ${BOLD}You could lose SSH access if not configured properly${NC}"
+    echo ""
+    echo -e "${GREEN}Safety recommendations:${NC}"
+    echo -e "  • Keep this SSH session open until verification"
+    echo -e "  • Test new SSH connection before closing this one"
+    echo -e "  • Have console/VNC access available as backup"
+    echo ""
+
+    if ! ask_yes_no "Do you understand the risks and want to continue?" "n"; then
+        log_info "UFW whitelist setup cancelled"
+        return 0
+    fi
+
+    # Detect current connection IP
+    local current_ip=""
+    if [[ -n "$SSH_CONNECTION" ]]; then
+        current_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}')
+        log_info "Detected current SSH connection from: $current_ip"
+    fi
+
+    # Detect private networks
+    log_info "Detecting private networks..."
+    local private_networks=()
+
+    # Get all IPv4 addresses and their networks
+    while IFS= read -r line; do
+        if [[ "$line" =~ inet[[:space:]]([0-9.]+)/([0-9]+) ]]; then
+            local ip="${BASH_REMATCH[1]}"
+            local cidr="${BASH_REMATCH[2]}"
+            local network="${ip}/${cidr}"
+
+            # Check if it's a private network
+            if [[ "$ip" =~ ^10\. ]] || \
+               [[ "$ip" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || \
+               [[ "$ip" =~ ^192\.168\. ]]; then
+                private_networks+=("$network")
+                log_info "  Found private network: $network"
+            fi
+        fi
+    done < <(ip -4 addr show 2>/dev/null | grep "inet ")
+
+    # Collect IPs/networks to whitelist
+    local whitelist=()
+
+    # Add current IP if detected
+    if [[ -n "$current_ip" ]]; then
+        echo ""
+        if ask_yes_no "Add current SSH IP ($current_ip) to whitelist?" "y"; then
+            whitelist+=("$current_ip")
+        fi
+    fi
+
+    # Add private networks
+    if [[ ${#private_networks[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "${BOLD}Detected private networks:${NC}"
+        for net in "${private_networks[@]}"; do
+            echo "  - $net"
+        done
+        echo ""
+        if ask_yes_no "Add all private networks to whitelist?" "y"; then
+            whitelist+=("${private_networks[@]}")
+        fi
+    fi
+
+    # Allow adding custom IPs/networks
+    echo ""
+    echo -e "${BOLD}Add custom IPs or networks to whitelist${NC}"
+    echo -e "${DIM}(Enter IP address or CIDR notation, e.g., 203.0.113.5 or 203.0.113.0/24)${NC}"
+    echo -e "${DIM}(Press Enter with empty input to finish)${NC}"
+    echo ""
+
+    while true; do
+        local custom_ip=""
+        read_prompt "IP/Network to whitelist (or Enter to finish): " custom_ip ""
+
+        if [[ -z "$custom_ip" ]]; then
+            break
+        fi
+
+        # Validate IP/CIDR format
+        if [[ "$custom_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+            whitelist+=("$custom_ip")
+            log_success "Added: $custom_ip"
+        else
+            log_error "Invalid format. Use: 203.0.113.5 or 203.0.113.0/24"
+        fi
+    done
+
+    # Show summary
+    if [[ ${#whitelist[@]} -eq 0 ]]; then
+        log_error "No IPs/networks added to whitelist. Cancelling for safety."
+        return 1
+    fi
+
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo -e "${BOLD}Whitelist Summary:${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    for item in "${whitelist[@]}"; do
+        echo -e "  ${GREEN}✓${NC} $item"
+    done
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${RED}${BOLD}FINAL WARNING:${NC}"
+    echo -e "  • Default policy will be: ${RED}DENY all incoming${NC}"
+    echo -e "  • Only listed IPs will have access"
+    echo -e "  • ${BOLD}Keep this session open for testing!${NC}"
+    echo ""
+
+    if ! ask_yes_no "Apply whitelist configuration?" "n"; then
+        log_info "UFW whitelist setup cancelled"
+        return 0
+    fi
+
+    # Apply UFW rules
+    log_info "Applying UFW whitelist rules..."
+
+    # First, allow from whitelisted IPs to SSH port
+    local ssh_port=$(grep -E "^Port\s+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    if [[ -z "$ssh_port" ]]; then
+        ssh_port="22"
+    fi
+
+    for item in "${whitelist[@]}"; do
+        log_info "Allowing from $item..."
+        ufw allow from "$item" to any port "$ssh_port" comment "Whitelist: $item" >> "$LOG_FILE" 2>&1
+
+        # Also allow to other common services if they exist
+        if command_exists nginx; then
+            ufw allow from "$item" to any port 80 comment "HTTP: $item" >> "$LOG_FILE" 2>&1
+            ufw allow from "$item" to any port 443 comment "HTTPS: $item" >> "$LOG_FILE" 2>&1
+        fi
+    done
+
+    # Change default policy to deny
+    log_info "Setting default policy to DENY..."
+    ufw default deny incoming >> "$LOG_FILE" 2>&1
+    ufw default allow outgoing >> "$LOG_FILE" 2>&1
+
+    # Reload UFW
+    ufw reload >> "$LOG_FILE" 2>&1
+
+    log_success "UFW whitelist configured successfully"
+
+    # Show final status
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo -e "${BOLD}UFW Whitelist Status:${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    ufw status numbered | grep -E "ALLOW|DENY" | head -20
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}${BOLD}IMPORTANT - TEST YOUR ACCESS NOW:${NC}"
+    echo -e "  1. ${BOLD}Keep this SSH session open${NC}"
+    echo -e "  2. Open a NEW SSH connection to test"
+    echo -e "  3. Verify you can connect successfully"
+    echo -e "  4. Only close this session after verification"
+    echo ""
+    echo -e "${DIM}If locked out, use console/VNC access to run:${NC}"
+    echo -e "${DIM}  sudo ufw disable${NC}"
+    echo -e "${DIM}  sudo ufw reset${NC}"
+    echo ""
+    echo -e "${BOLD}Useful commands:${NC}"
+    echo -e "  Status:        ${CYAN}sudo ufw status numbered${NC}"
+    echo -e "  Delete rule:   ${CYAN}sudo ufw delete <number>${NC}"
+    echo -e "  Add IP:        ${CYAN}sudo ufw allow from <IP> to any port $ssh_port${NC}"
+    echo -e "  Disable:       ${CYAN}sudo ufw disable${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
 
     return 0
 }
