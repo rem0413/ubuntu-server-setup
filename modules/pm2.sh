@@ -98,6 +98,16 @@ setup_pm2_startup() {
     # Get the actual user (not root)
     local actual_user="${SUDO_USER:-$USER}"
 
+    # If running as root without SUDO_USER, skip startup setup
+    if [[ "$actual_user" == "root" ]]; then
+        log_warning "Running as root without SUDO_USER"
+        log_warning "PM2 startup script should be configured for a non-root user"
+        log_info "You can configure it later by running: pm2 startup"
+        return 0
+    fi
+
+    log_info "Configuring PM2 for user: $actual_user"
+
     # Detect init system
     local startup_system
     if command_exists systemctl; then
@@ -107,25 +117,49 @@ setup_pm2_startup() {
     else
         startup_system="systemv"
     fi
+    log_info "Detected init system: $startup_system"
 
     # Generate startup script
-    local startup_cmd=$(sudo -u "$actual_user" pm2 startup "$startup_system" -u "$actual_user" --hp $(eval echo ~$actual_user) 2>&1 | grep "sudo")
+    log_info "Generating PM2 startup command..."
+    local startup_output=$(sudo -u "$actual_user" pm2 startup "$startup_system" -u "$actual_user" --hp $(eval echo ~$actual_user) 2>&1)
+    local startup_cmd=$(echo "$startup_output" | grep "sudo env")
 
     if [[ -n "$startup_cmd" ]]; then
+        log_info "Executing startup command..."
+        log_info "Command: $startup_cmd"
+
         eval "$startup_cmd" >> "$LOG_FILE" 2>&1
-        if [[ $? -eq 0 ]]; then
+        local result=$?
+
+        if [[ $result -eq 0 ]]; then
             log_success "PM2 startup script configured for $actual_user"
             log_info "PM2 will now start automatically on system boot"
 
             # Save PM2 process list
+            log_info "Saving PM2 process list..."
             sudo -u "$actual_user" pm2 save >> "$LOG_FILE" 2>&1
-            log_info "PM2 process list saved"
+            if [[ $? -eq 0 ]]; then
+                log_success "PM2 process list saved"
+            else
+                log_warning "Failed to save PM2 process list (no processes running yet)"
+            fi
         else
             log_error "Failed to configure PM2 startup script"
+            log_info "Startup command output:"
+            echo "$startup_output"
+            log_info "Last 20 lines of log:"
+            tail -20 "$LOG_FILE"
             return 1
         fi
     else
-        log_warning "Could not generate PM2 startup command"
+        log_error "Could not generate PM2 startup command"
+        log_info "PM2 startup output:"
+        echo "$startup_output"
+        log_info "This might happen if:"
+        log_info "  - PM2 is not properly installed"
+        log_info "  - User $actual_user doesn't have proper permissions"
+        log_info "  - PM2 version is incompatible"
+        log_info "You can manually configure startup later with: pm2 startup"
         return 1
     fi
 
