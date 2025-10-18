@@ -42,9 +42,21 @@ install_pm2() {
         return 1
     fi
 
+    # Get npm global bin path
+    local npm_bin=$(npm bin -g 2>/dev/null || echo "/usr/local/bin")
+    log_info "npm global bin: $npm_bin"
+
     # Refresh PATH to pick up newly installed pm2
-    export PATH="$PATH:/usr/local/bin:/usr/bin"
+    export PATH="$npm_bin:$PATH:/usr/local/bin:/usr/bin"
     hash -r 2>/dev/null || true
+
+    # Create symlink if pm2 not in PATH
+    if ! command -v pm2 >/dev/null 2>&1; then
+        if [[ -f "$npm_bin/pm2" ]]; then
+            ln -sf "$npm_bin/pm2" /usr/local/bin/pm2 2>/dev/null || true
+            log_info "Created symlink: /usr/local/bin/pm2"
+        fi
+    fi
 
     # Wait a moment for installation to complete
     sleep 2

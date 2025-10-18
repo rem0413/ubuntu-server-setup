@@ -59,10 +59,36 @@ case "$1" in
         ;;
 
     update|u)
-        echo "Updating ubuntu-setup from GitHub..."
+        echo "==========================================="
+        echo "  Updating ubuntu-setup from GitHub"
+        echo "==========================================="
+        echo ""
         cd "$INSTALL_DIR"
-        git pull
-        echo "Updated successfully!"
+
+        # Get current branch
+        local branch=$(git branch --show-current)
+        echo "Current branch: $branch"
+
+        # Pull latest changes
+        echo "Pulling latest changes..."
+        git pull origin "$branch"
+
+        if [[ $? -eq 0 ]]; then
+            # Make scripts executable
+            chmod +x install.sh status.sh cleanup.sh update.sh test.sh 2>/dev/null || true
+
+            # Show what was updated
+            echo ""
+            echo "Last commit:"
+            git log -1 --oneline
+
+            echo ""
+            echo "✓ Updated successfully!"
+        else
+            echo ""
+            echo "✗ Update failed"
+            exit 1
+        fi
         ;;
 
     status|s)
