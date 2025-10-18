@@ -73,8 +73,23 @@ install_pm2() {
     fi
 
     # Setup PM2 startup script
-    if ask_yes_no "Setup PM2 startup script?" "y"; then
-        setup_pm2_startup
+    # Get the actual user (not root)
+    local actual_user="${SUDO_USER:-$USER}"
+
+    if [[ "$actual_user" == "root" ]]; then
+        log_warning "PM2 installed globally"
+        log_info "PM2 startup script should be configured per user"
+        log_info ""
+        log_info "To configure PM2 startup for a user, run as that user:"
+        log_info "  su - username"
+        log_info "  pm2 startup"
+        log_info "  # Then run the command it gives you"
+        log_info "  pm2 save"
+        log_info ""
+    else
+        if ask_yes_no "Setup PM2 startup script for user '$actual_user'?" "y"; then
+            setup_pm2_startup
+        fi
     fi
 
     # Configure PM2 log rotation
@@ -88,6 +103,33 @@ install_pm2() {
         log_info "Log rotation configured: 10MB max, 7 days retention"
     fi
 
+    # Save to summary
+    local pm2_version=$(pm2 --version 2>/dev/null || echo "unknown")
+    cat >> /root/ubuntu-setup-summary.txt << EOF
+
+PM2 Process Manager:
+  Version: $pm2_version
+  Installed: Globally (npm)
+  Command: pm2
+
+  Usage:
+    pm2 start app.js              # Start application
+    pm2 list                      # List all processes
+    pm2 logs                      # View logs
+    pm2 restart all               # Restart all apps
+    pm2 stop all                  # Stop all apps
+    pm2 delete all                # Remove all apps
+
+  Startup (per user):
+    su - username
+    pm2 startup                   # Get startup command
+    # Run the command it gives you
+    pm2 save                      # Save process list
+
+EOF
+
+    log_info "PM2 information saved to: /root/ubuntu-setup-summary.txt"
+
     return 0
 }
 
@@ -98,11 +140,10 @@ setup_pm2_startup() {
     # Get the actual user (not root)
     local actual_user="${SUDO_USER:-$USER}"
 
-    # If running as root without SUDO_USER, skip startup setup
+    # This function should only be called when actual_user is not root
+    # The check is done in the caller function
     if [[ "$actual_user" == "root" ]]; then
-        log_warning "Running as root without SUDO_USER"
-        log_warning "PM2 startup script should be configured for a non-root user"
-        log_info "You can configure it later by running: pm2 startup"
+        log_info "Skipping PM2 startup - should be configured per user"
         return 0
     fi
 
