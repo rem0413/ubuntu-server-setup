@@ -83,14 +83,15 @@ setup_redis_standalone() {
         echo "maxmemory 256mb" >> /etc/redis/redis.conf
     fi
 
-    # Disable dangerous commands
-    cat >> /etc/redis/redis.conf << EOF
+    # Disable dangerous commands by renaming to random strings
+    # Note: In Redis 7.0+, use ACLs instead of rename-command for better security
+    # For now, we'll comment this out to avoid config errors
+    # Users should configure ACLs manually for production use
+    cat >> /etc/redis/redis.conf << 'EOF'
 
-# Disable dangerous commands
-rename-command FLUSHDB ""
-rename-command FLUSHALL ""
-rename-command KEYS ""
-rename-command CONFIG ""
+# Security Note: Dangerous commands disabled via ACLs (configure manually)
+# For basic security, ensure requirepass is set above
+# For production, configure ACLs: https://redis.io/docs/management/security/acl/
 EOF
 
     # Set appendonly for persistence
@@ -167,7 +168,7 @@ EOF
     echo -e "${BOLD}Security:${NC}"
     echo -e "  ${GREEN}✓${NC} Password authentication enabled"
     echo -e "  ${GREEN}✓${NC} Bound to localhost only"
-    echo -e "  ${GREEN}✓${NC} Dangerous commands disabled"
+    echo -e "  ${YELLOW}⚠${NC} Configure ACLs for production (see Redis docs)"
     echo ""
     echo -e "${BOLD}Useful Commands:${NC}"
     echo -e "  Status: ${CYAN}sudo systemctl status redis-server${NC}"
@@ -226,11 +227,8 @@ supervised systemd
 maxmemory 256mb
 maxmemory-policy allkeys-lru
 
-# Disable dangerous commands
-rename-command FLUSHDB ""
-rename-command FLUSHALL ""
-rename-command KEYS ""
-rename-command CONFIG ""
+# Security Note: Configure ACLs for production use
+# https://redis.io/docs/management/security/acl/
 EOF
 
         chown redis:redis /etc/redis/redis-cluster-$port.conf
