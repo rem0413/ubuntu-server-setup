@@ -203,29 +203,70 @@ get_user_selections() {
 show_simple_selection_menu() {
     local done=false
     local selections=""
+    local input=""
 
     while [[ "$done" == false ]]; do
         show_simple_menu "$selections"
-        read -r input
 
-        case $input in
-            0)
-                SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
-                done=true
-                ;;
-            q|Q)
-                log_info "Installation cancelled by user"
-                exit 0
-                ;;
-            *)
-                if [[ "$input" =~ ^[1-9][0-9]*\ ]+$ ]]; then
-                    SELECTED_COMPONENTS=($input)
+        # Read input with timeout to handle piped input
+        if read -r -t 60 input 2>/dev/null; then
+            # Trim whitespace
+            input=$(echo "$input" | xargs)
+
+            case $input in
+                0)
+                    SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
+                    log_info "Selected: All components"
                     done=true
-                else
-                    show_error "Invalid input. Please enter numbers 1-12, 0 for all, or q to quit."
-                fi
-                ;;
-        esac
+                    ;;
+                q|Q)
+                    log_info "Installation cancelled by user"
+                    exit 0
+                    ;;
+                "")
+                    echo -e "${RED}Error: No input received${NC}"
+                    echo -e "${YELLOW}Please enter component numbers (e.g., 1 2 4 6)${NC}"
+                    echo ""
+                    ;;
+                *)
+                    # Validate input: numbers separated by spaces
+                    if [[ "$input" =~ ^[0-9\ ]+$ ]]; then
+                        # Convert to array and validate range
+                        local temp_array=($input)
+                        local valid=true
+
+                        for num in "${temp_array[@]}"; do
+                            if [[ $num -lt 1 || $num -gt 12 ]]; then
+                                valid=false
+                                echo -e "${RED}Error: Invalid component number: $num${NC}"
+                                echo -e "${YELLOW}Valid range: 1-12${NC}"
+                                echo ""
+                                break
+                            fi
+                        done
+
+                        if [[ "$valid" == true ]]; then
+                            SELECTED_COMPONENTS=($input)
+                            selections="$input"
+                            log_info "Selected components: $input"
+                            done=true
+                        fi
+                    else
+                        echo -e "${RED}Error: Invalid input format${NC}"
+                        echo -e "${YELLOW}Please enter numbers only (e.g., 1 2 4 6 8)${NC}"
+                        echo -e "${YELLOW}Or press '0' for all, 'q' to quit${NC}"
+                        echo ""
+                    fi
+                    ;;
+            esac
+        else
+            echo -e "${RED}Error: Input timeout or not available${NC}"
+            echo -e "${YELLOW}Tip: Use command line flags for non-interactive installation:${NC}"
+            echo -e "${DIM}  --all              : Install all components${NC}"
+            echo -e "${DIM}  --profile nodejs-app : Use predefined profile${NC}"
+            echo ""
+            exit 1
+        fi
     done
 }
 

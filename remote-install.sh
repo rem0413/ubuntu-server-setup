@@ -52,6 +52,10 @@ echo -e "  Repository: ${CYAN}${REPO_USER}/${REPO_NAME}${NC}"
 echo -e "  Branch: ${CYAN}${REPO_BRANCH}${NC}"
 echo -e "  Install Directory: ${CYAN}${INSTALL_DIR}${NC}"
 echo ""
+echo -e "${YELLOW}Note:${NC} For non-interactive installation, use:"
+echo -e "${DIM}  curl -fsSL URL | sudo bash -s -- --all${NC}"
+echo -e "${DIM}  curl -fsSL URL | sudo bash -s -- --profile nodejs-app${NC}"
+echo ""
 
 # Create temp directory
 echo -e "${BOLD}[1/5]${NC} Creating temporary directory..."
