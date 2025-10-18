@@ -78,7 +78,11 @@ configure_ssh_hardening() {
     esac
 
     # Test SSH configuration
-    if sshd -t 2>> /var/log/ubuntu-setup.log; then
+    log_info "Testing SSH configuration..."
+    local test_output=$(sshd -t 2>&1)
+    local test_result=$?
+
+    if [[ $test_result -eq 0 ]]; then
         log_success "SSH configuration is valid"
 
         echo ""
@@ -92,15 +96,36 @@ configure_ssh_hardening() {
         if ask_yes_no "Restart SSH service?" "n"; then
             systemctl restart sshd >> /var/log/ubuntu-setup.log 2>&1
 
+            # Wait for service to start
+            sleep 2
+
             if systemctl is-active --quiet sshd; then
                 log_success "SSH service restarted successfully"
                 log_warning "Test your SSH connection NOW in a new terminal!"
                 return 0
             else
                 log_error "SSH service failed to start"
+                log_info "Service status:"
+                systemctl status sshd --no-pager --lines=20
+                log_info "Recent logs:"
+                journalctl -u sshd -n 30 --no-pager
+                log_info "Configuration test:"
+                sshd -t 2>&1
+
                 log_info "Restoring backup..."
-                cp "$sshd_config.bak."* "$sshd_config" 2>/dev/null
-                systemctl restart sshd >> /var/log/ubuntu-setup.log 2>&1
+                local backup_file=$(ls -t "$sshd_config.bak."* 2>/dev/null | head -1)
+                if [[ -f "$backup_file" ]]; then
+                    cp "$backup_file" "$sshd_config"
+                    log_info "Restored from: $backup_file"
+                    systemctl restart sshd >> /var/log/ubuntu-setup.log 2>&1
+                    if systemctl is-active --quiet sshd; then
+                        log_success "SSH service restored successfully"
+                    else
+                        log_error "Failed to restore SSH service"
+                    fi
+                else
+                    log_error "No backup file found to restore"
+                fi
                 return 1
             fi
         else
@@ -108,6 +133,9 @@ configure_ssh_hardening() {
         fi
     else
         log_error "SSH configuration test failed"
+        log_info "Configuration errors:"
+        echo "$test_output"
+        log_info "Please fix the errors above and try again"
         return 1
     fi
 
