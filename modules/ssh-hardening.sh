@@ -586,10 +586,23 @@ update_ssh_config() {
 
     # Check if key exists (commented or uncommented, with optional spaces)
     if grep -qE "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]" "$sshd_config"; then
+        # Show what we're replacing (for debugging)
+        local old_line=$(grep -E "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]" "$sshd_config" | head -1)
+        log_info "Updating: '$old_line' → '${key} ${value}'"
+
         # Replace existing line (handles #Port 22, Port 22, # Port 22, etc.)
         sed -i "s|^[[:space:]]*#*[[:space:]]*${key}[[:space:]].*|${key} ${value}|" "$sshd_config"
+
+        # Verify the change
+        local new_line=$(grep -E "^${key}[[:space:]]" "$sshd_config" | head -1)
+        if [[ -n "$new_line" ]]; then
+            log_success "Verified: $new_line"
+        else
+            log_warning "Could not verify change in config file"
+        fi
     else
         # Append new line
+        log_info "Adding new line: ${key} ${value}"
         echo "${key} ${value}" >> "$sshd_config"
     fi
 }
