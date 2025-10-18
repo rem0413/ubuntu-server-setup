@@ -131,8 +131,17 @@ confirm_installation() {
     echo -e "${BOLD}Do you want to continue?${NC}"
     echo -n "Type 'yes' to proceed, or 'no' to cancel: "
 
-    # Read with timeout
-    if read -r -t 60 response 2>/dev/null; then
+    # Read with timeout, handle piped input
+    local response=""
+    if [ -t 0 ]; then
+        # stdin is a terminal, read normally
+        read -r -t 60 response 2>/dev/null
+    else
+        # stdin is piped, try to read from /dev/tty
+        read -r -t 60 response < /dev/tty 2>/dev/null || response=""
+    fi
+
+    if [[ -n "$response" ]]; then
         response=$(echo "$response" | xargs | tr '[:upper:]' '[:lower:]')
 
         if [[ "$response" == "yes" || "$response" == "y" ]]; then
@@ -212,7 +221,13 @@ ask_yes_no() {
     fi
 
     echo -n "$question $prompt: "
-    read -r response
+
+    local response=""
+    if [ -t 0 ]; then
+        read -r response
+    else
+        read -r response < /dev/tty 2>/dev/null || response="$default"
+    fi
 
     response=${response:-$default}
 
@@ -228,10 +243,15 @@ get_input() {
     local prompt="$1"
     local default="$2"
     local secret="${3:-false}"
+    local response=""
 
     if [[ "$secret" == "true" ]]; then
         echo -n "$prompt: "
-        read -s response
+        if [ -t 0 ]; then
+            read -s response
+        else
+            read -s response < /dev/tty 2>/dev/null || response=""
+        fi
         echo ""
     else
         echo -n "$prompt"
@@ -239,7 +259,11 @@ get_input() {
             echo -n " ${DIM}[$default]${NC}"
         fi
         echo -n ": "
-        read -r response
+        if [ -t 0 ]; then
+            read -r response
+        else
+            read -r response < /dev/tty 2>/dev/null || response=""
+        fi
     fi
 
     echo "${response:-$default}"

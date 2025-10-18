@@ -209,7 +209,16 @@ show_simple_selection_menu() {
         show_simple_menu "$selections"
 
         # Read input with timeout to handle piped input
-        if read -r -t 60 input 2>/dev/null; then
+        # Try to read from /dev/tty first for piped execution (curl | bash)
+        if [ -t 0 ]; then
+            # stdin is a terminal, read normally
+            read -r -t 60 input 2>/dev/null
+        else
+            # stdin is piped, try to read from /dev/tty
+            read -r -t 60 input < /dev/tty 2>/dev/null || input=""
+        fi
+
+        if [[ -n "$input" || "$input" == "0" ]]; then
             # Trim whitespace
             input=$(echo "$input" | xargs)
 
