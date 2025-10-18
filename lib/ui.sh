@@ -73,43 +73,34 @@ show_simple_menu() {
     local selections="$1"
 
     echo ""
-    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║           Select Components to Install                      ║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo "========================================="
+    echo "  Ubuntu Server Setup - Select Components"
+    echo "========================================="
     echo ""
-    echo -e "${CYAN}═══ Core Installation ═══${NC}"
-    echo -e "  ${GREEN}[1]${NC}  System Update & Essential Tools ${DIM}(Recommended)${NC}"
-    echo -e "  ${GREEN}[2]${NC}  MongoDB Database"
-    echo -e "  ${GREEN}[3]${NC}  PostgreSQL Database"
-    echo -e "  ${GREEN}[4]${NC}  Node.js & npm"
-    echo -e "  ${GREEN}[5]${NC}  PM2 Process Manager ${DIM}(Requires Node.js)${NC}"
-    echo -e "  ${GREEN}[6]${NC}  Docker & Docker Compose"
+    echo "Core:"
+    echo "  1. System Update & Essential Tools (Recommended)"
+    echo "  2. MongoDB Database"
+    echo "  3. PostgreSQL Database"
+    echo "  4. Node.js & npm"
+    echo "  5. PM2 Process Manager"
+    echo "  6. Docker & Docker Compose"
     echo ""
-    echo -e "${CYAN}═══ Web & Security ═══${NC}"
-    echo -e "  ${GREEN}[7]${NC}  Nginx Web Server (Cloudflare & Advanced Config)"
-    echo -e "  ${GREEN}[8]${NC}  Security Tools (UFW, Fail2ban)"
-    echo -e "  ${GREEN}[9]${NC}  OpenVPN Server & Client Management"
-    echo -e "  ${GREEN}[10]${NC} SSH Security Hardening"
+    echo "Web & Security:"
+    echo "  7. Nginx Web Server"
+    echo "  8. Security Tools (UFW, Fail2ban)"
+    echo "  9. OpenVPN Server"
+    echo " 10. SSH Security Hardening"
     echo ""
-    echo -e "${CYAN}═══ Additional Services ═══${NC}"
-    echo -e "  ${GREEN}[11]${NC} Redis Cache Server"
-    echo -e "  ${GREEN}[12]${NC} Monitoring Stack (Prometheus/Grafana)"
+    echo "Additional:"
+    echo " 11. Redis Cache Server"
+    echo " 12. Monitoring Stack"
     echo ""
-    echo -e "${CYAN}═══ Quick Options ═══${NC}"
-    echo -e "  ${YELLOW}[0]${NC}  Install All Components"
-    echo -e "  ${RED}[q]${NC}  Quit Installation"
+    echo "Options:"
+    echo "  0 = Install All"
+    echo "  q = Quit"
     echo ""
-    if [[ -n "$selections" ]]; then
-        echo -e "${DIM}Current selection: $selections${NC}"
-        echo ""
-    fi
-    echo -e "${BOLD}Enter your choice:${NC}"
-    echo -e "${DIM}  - Single component: 1${NC}"
-    echo -e "${DIM}  - Multiple components: 1 2 4 6 8${NC}"
-    echo -e "${DIM}  - All components: 0${NC}"
-    echo -e "${DIM}  - Cancel: q${NC}"
-    echo ""
-    echo -n "> "
+    echo "Enter numbers separated by spaces (e.g., 1 4 7 8):"
+    printf "> "
 }
 
 # Confirm installation
@@ -117,45 +108,36 @@ confirm_installation() {
     local components="$1"
 
     echo ""
-    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║              Installation Confirmation                      ║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo "========================================="
+    echo "  Installation Confirmation"
+    echo "========================================="
     echo ""
-    echo -e "${CYAN}The following components will be installed:${NC}"
+    echo "The following components will be installed:"
     echo ""
-    echo -e "$components"
+    echo "$components"
     echo ""
-    echo -e "${YELLOW}⚠️  This will modify your system configuration${NC}"
-    echo -e "${DIM}   Installation may take 10-30 minutes depending on components${NC}"
+    echo "WARNING: This will modify your system configuration"
+    echo "Installation may take 10-30 minutes"
     echo ""
-    echo -e "${BOLD}Do you want to continue?${NC}"
-    echo -n "Type 'yes' to proceed, or 'no' to cancel: "
+    printf "Continue? Type 'yes' to proceed: "
 
     # Read with timeout, handle piped input
     local response=""
     if [ -t 0 ]; then
-        # stdin is a terminal, read normally
-        read -r -t 60 response 2>/dev/null
+        read -r response
     else
-        # stdin is piped, try to read from /dev/tty
-        read -r -t 60 response < /dev/tty 2>/dev/null || response=""
+        read -r response < /dev/tty 2>/dev/null || response=""
     fi
 
-    if [[ -n "$response" ]]; then
-        response=$(echo "$response" | xargs | tr '[:upper:]' '[:lower:]')
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
 
-        if [[ "$response" == "yes" || "$response" == "y" ]]; then
-            echo ""
-            echo -e "${GREEN}✓ Starting installation...${NC}"
-            return 0
-        else
-            echo ""
-            echo -e "${RED}✗ Installation cancelled${NC}"
-            return 1
-        fi
+    if [[ "$response" == "yes" || "$response" == "y" ]]; then
+        echo ""
+        echo "Starting installation..."
+        return 0
     else
         echo ""
-        echo -e "${RED}✗ No input received - installation cancelled${NC}"
+        echo "Installation cancelled"
         return 1
     fi
 }

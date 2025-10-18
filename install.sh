@@ -202,80 +202,68 @@ get_user_selections() {
 # Simple selection menu
 show_simple_selection_menu() {
     local done=false
-    local selections=""
     local input=""
 
     while [[ "$done" == false ]]; do
-        show_simple_menu "$selections"
+        show_simple_menu
 
-        # Read input with timeout to handle piped input
-        # Try to read from /dev/tty first for piped execution (curl | bash)
+        # Read input - handle both terminal and piped scenarios
         if [ -t 0 ]; then
-            # stdin is a terminal, read normally
-            read -r -t 60 input 2>/dev/null
+            read -r input
         else
-            # stdin is piped, try to read from /dev/tty
-            read -r -t 60 input < /dev/tty 2>/dev/null || input=""
+            read -r input < /dev/tty 2>/dev/null || input=""
         fi
 
-        if [[ -n "$input" || "$input" == "0" ]]; then
-            # Trim whitespace
-            input=$(echo "$input" | xargs)
+        # Trim whitespace
+        input=$(echo "$input" | xargs)
 
-            case $input in
-                0)
-                    SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
-                    log_info "Selected: All components"
-                    done=true
-                    ;;
-                q|Q)
-                    log_info "Installation cancelled by user"
-                    exit 0
-                    ;;
-                "")
-                    echo -e "${RED}Error: No input received${NC}"
-                    echo -e "${YELLOW}Please enter component numbers (e.g., 1 2 4 6)${NC}"
-                    echo ""
-                    ;;
-                *)
-                    # Validate input: numbers separated by spaces
-                    if [[ "$input" =~ ^[0-9\ ]+$ ]]; then
-                        # Convert to array and validate range
-                        local temp_array=($input)
-                        local valid=true
+        case $input in
+            0)
+                SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
+                echo "Selected: All components"
+                done=true
+                ;;
+            q|Q)
+                echo "Installation cancelled"
+                exit 0
+                ;;
+            "")
+                echo ""
+                echo "ERROR: No input received"
+                echo "Enter component numbers (e.g., 1 4 7 8) or 'q' to quit"
+                echo ""
+                ;;
+            *)
+                # Validate input: numbers separated by spaces
+                if [[ "$input" =~ ^[0-9\ ]+$ ]]; then
+                    # Convert to array and validate range
+                    local temp_array=($input)
+                    local valid=true
 
-                        for num in "${temp_array[@]}"; do
-                            if [[ $num -lt 1 || $num -gt 12 ]]; then
-                                valid=false
-                                echo -e "${RED}Error: Invalid component number: $num${NC}"
-                                echo -e "${YELLOW}Valid range: 1-12${NC}"
-                                echo ""
-                                break
-                            fi
-                        done
-
-                        if [[ "$valid" == true ]]; then
-                            SELECTED_COMPONENTS=($input)
-                            selections="$input"
-                            log_info "Selected components: $input"
-                            done=true
+                    for num in "${temp_array[@]}"; do
+                        if [[ $num -lt 1 || $num -gt 12 ]]; then
+                            valid=false
+                            echo ""
+                            echo "ERROR: Invalid number '$num' (valid: 1-12)"
+                            echo ""
+                            break
                         fi
-                    else
-                        echo -e "${RED}Error: Invalid input format${NC}"
-                        echo -e "${YELLOW}Please enter numbers only (e.g., 1 2 4 6 8)${NC}"
-                        echo -e "${YELLOW}Or press '0' for all, 'q' to quit${NC}"
-                        echo ""
+                    done
+
+                    if [[ "$valid" == true ]]; then
+                        SELECTED_COMPONENTS=($input)
+                        echo "Selected components: $input"
+                        done=true
                     fi
-                    ;;
-            esac
-        else
-            echo -e "${RED}Error: Input timeout or not available${NC}"
-            echo -e "${YELLOW}Tip: Use command line flags for non-interactive installation:${NC}"
-            echo -e "${DIM}  --all              : Install all components${NC}"
-            echo -e "${DIM}  --profile nodejs-app : Use predefined profile${NC}"
-            echo ""
-            exit 1
-        fi
+                else
+                    echo ""
+                    echo "ERROR: Invalid format"
+                    echo "Enter numbers only (e.g., 1 4 7 8)"
+                    echo "Or: 0 = all, q = quit"
+                    echo ""
+                fi
+                ;;
+        esac
     done
 }
 
@@ -285,18 +273,18 @@ confirm_selections() {
 
     for component in "${SELECTED_COMPONENTS[@]}"; do
         case $component in
-            1) components_text+="  ${GREEN}${CHECK}${NC} System Update & Essential Tools\n" ;;
-            2) components_text+="  ${GREEN}${CHECK}${NC} MongoDB Database\n" ;;
-            3) components_text+="  ${GREEN}${CHECK}${NC} PostgreSQL Database\n" ;;
-            4) components_text+="  ${GREEN}${CHECK}${NC} Node.js & npm\n" ;;
-            5) components_text+="  ${GREEN}${CHECK}${NC} PM2 Process Manager\n" ;;
-            6) components_text+="  ${GREEN}${CHECK}${NC} Docker & Docker Compose\n" ;;
-            7) components_text+="  ${GREEN}${CHECK}${NC} Nginx Web Server (Cloudflare & Advanced)\n" ;;
-            8) components_text+="  ${GREEN}${CHECK}${NC} Security Tools (UFW, Fail2ban)\n" ;;
-            9) components_text+="  ${GREEN}${CHECK}${NC} OpenVPN Server & Client Management\n" ;;
-            10) components_text+="  ${GREEN}${CHECK}${NC} SSH Security Hardening\n" ;;
-            11) components_text+="  ${GREEN}${CHECK}${NC} Redis Cache Server\n" ;;
-            12) components_text+="  ${GREEN}${CHECK}${NC} Monitoring Stack (Prometheus/Grafana)\n" ;;
+            1) components_text+="  - System Update & Essential Tools\n" ;;
+            2) components_text+="  - MongoDB Database\n" ;;
+            3) components_text+="  - PostgreSQL Database\n" ;;
+            4) components_text+="  - Node.js & npm\n" ;;
+            5) components_text+="  - PM2 Process Manager\n" ;;
+            6) components_text+="  - Docker & Docker Compose\n" ;;
+            7) components_text+="  - Nginx Web Server\n" ;;
+            8) components_text+="  - Security Tools (UFW, Fail2ban)\n" ;;
+            9) components_text+="  - OpenVPN Server\n" ;;
+            10) components_text+="  - SSH Security Hardening\n" ;;
+            11) components_text+="  - Redis Cache Server\n" ;;
+            12) components_text+="  - Monitoring Stack\n" ;;
         esac
     done
 
@@ -305,13 +293,13 @@ confirm_selections() {
     # Dry-run mode - just show and exit
     if [[ "$DRY_RUN" == true ]]; then
         echo ""
-        log_info "DRY-RUN MODE: No changes will be made"
-        log_info "To proceed with installation, run without --dry-run flag"
+        echo "DRY-RUN MODE: No changes will be made"
+        echo "To proceed with installation, run without --dry-run flag"
         exit 0
     fi
 
     if ! confirm_installation "$components_text"; then
-        log_info "Installation cancelled by user"
+        echo "Installation cancelled by user"
         exit 0
     fi
 }
