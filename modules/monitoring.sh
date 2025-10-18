@@ -259,11 +259,12 @@ EOF
     fi
 
     # Install Prometheus
-    log_info "Installing Prometheus..."
+    if [[ "$INSTALL_PROMETHEUS" == true ]]; then
+        log_info "Installing Prometheus..."
 
-    cd /tmp
-    wget -q "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
-    tar xzf "prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+        cd /tmp
+        wget -q "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+        tar xzf "prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
 
     mkdir -p /etc/prometheus /var/lib/prometheus
 
@@ -358,12 +359,14 @@ EOF
     systemctl start prometheus
     systemctl enable prometheus >> /var/log/ubuntu-setup.log 2>&1
 
-    if systemctl is-active --quiet prometheus; then
-        log_success "Prometheus installed (port 9090)"
+        if systemctl is-active --quiet prometheus; then
+            log_success "Prometheus installed (port 9090)"
+        fi
     fi
 
     # Install Grafana
-    log_info "Installing Grafana..."
+    if [[ "$INSTALL_GRAFANA" == true ]]; then
+        log_info "Installing Grafana..."
 
     apt-get install -y software-properties-common >> /var/log/ubuntu-setup.log 2>&1
 
@@ -385,16 +388,17 @@ EOF
     systemctl start grafana-server
     systemctl enable grafana-server >> /var/log/ubuntu-setup.log 2>&1
 
-    if systemctl is-active --quiet grafana-server; then
-        log_success "Grafana installed (port 3000)"
-    fi
+        if systemctl is-active --quiet grafana-server; then
+            log_success "Grafana installed (port 3000)"
+        fi
 
-    sleep 5
+        # Add Prometheus data source (only if Prometheus is also installed)
+        if [[ "$INSTALL_PROMETHEUS" == true ]]; then
+            sleep 5
 
-    # Add Prometheus data source
-    log_info "Configuring Grafana data source..."
+            log_info "Configuring Grafana data source..."
 
-    cat > /tmp/grafana-datasource.json << EOF
+            cat > /tmp/grafana-datasource.json << EOF
 {
   "name": "Prometheus",
   "type": "prometheus",
@@ -404,24 +408,26 @@ EOF
 }
 EOF
 
-    curl -s -X POST \
-        -H "Content-Type: application/json" \
-        -d @/tmp/grafana-datasource.json \
-        http://admin:${GRAFANA_PASSWORD}@localhost:3000/api/datasources \
-        >> /var/log/ubuntu-setup.log 2>&1
+            curl -s -X POST \
+                -H "Content-Type: application/json" \
+                -d @/tmp/grafana-datasource.json \
+                http://admin:${GRAFANA_PASSWORD}@localhost:3000/api/datasources \
+                >> /var/log/ubuntu-setup.log 2>&1
 
-    rm /tmp/grafana-datasource.json
+            rm /tmp/grafana-datasource.json
+        fi
+    fi
 
     # Display summary
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo -e "${BOLD}Monitoring Stack Installation Summary:${NC}"
+    echo -e "${BOLD}Monitoring Installation Summary:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${BOLD}Installed Components:${NC}"
-    echo -e "  ${GREEN}✓${NC} Prometheus v${PROM_VERSION} (http://localhost:9090)"
-    echo -e "  ${GREEN}✓${NC} Grafana (http://localhost:3000)"
 
+    [[ "$INSTALL_PROMETHEUS" == true ]] && echo -e "  ${GREEN}✓${NC} Prometheus v${PROM_VERSION} (http://localhost:9090)"
+    [[ "$INSTALL_GRAFANA" == true ]] && echo -e "  ${GREEN}✓${NC} Grafana (http://localhost:3000)"
     [[ "$INSTALL_NODE_EXPORTER" == true ]] && echo -e "  ${GREEN}✓${NC} node_exporter v${NODE_EXPORTER_VERSION} (port 9100)"
     [[ "$INSTALL_MYSQLD_EXPORTER" == true ]] && echo -e "  ${GREEN}✓${NC} mysqld_exporter v${MYSQLD_EXPORTER_VERSION} (port 9104)"
     [[ "$INSTALL_POSTGRES_EXPORTER" == true ]] && echo -e "  ${GREEN}✓${NC} postgres_exporter v${POSTGRES_EXPORTER_VERSION} (port 9187)"
@@ -429,10 +435,14 @@ EOF
     [[ "$INSTALL_MONGODB_EXPORTER" == true ]] && echo -e "  ${GREEN}✓${NC} mongodb_exporter v${MONGODB_EXPORTER_VERSION} (port 9216)"
 
     echo ""
-    echo -e "${YELLOW}${BOLD}IMPORTANT - Save Grafana Credentials:${NC}"
-    echo -e "${BOLD}Username:${NC} admin"
-    echo -e "${BOLD}Password:${NC} ${RED}$GRAFANA_PASSWORD${NC}"
-    echo ""
+
+    # Show Grafana credentials only if Grafana was installed
+    if [[ "$INSTALL_GRAFANA" == true ]]; then
+        echo -e "${YELLOW}${BOLD}IMPORTANT - Save Grafana Credentials:${NC}"
+        echo -e "${BOLD}Username:${NC} admin"
+        echo -e "${BOLD}Password:${NC} ${RED}$GRAFANA_PASSWORD${NC}"
+        echo ""
+    fi
 
     # Configuration warnings
     if [[ "$INSTALL_MYSQLD_EXPORTER" == true ]] || [[ "$INSTALL_POSTGRES_EXPORTER" == true ]] || [[ "$INSTALL_REDIS_EXPORTER" == true ]] || [[ "$INSTALL_MONGODB_EXPORTER" == true ]]; then
@@ -452,31 +462,43 @@ EOF
         echo ""
     fi
 
-    echo -e "${BOLD}Recommended Grafana Dashboards:${NC}"
-    [[ "$INSTALL_NODE_EXPORTER" == true ]] && echo -e "  - Node Exporter Full: Dashboard ID ${CYAN}1860${NC}"
-    [[ "$INSTALL_MYSQLD_EXPORTER" == true ]] && echo -e "  - MySQL Overview: Dashboard ID ${CYAN}7362${NC}"
-    [[ "$INSTALL_POSTGRES_EXPORTER" == true ]] && echo -e "  - PostgreSQL Database: Dashboard ID ${CYAN}9628${NC}"
-    [[ "$INSTALL_REDIS_EXPORTER" == true ]] && echo -e "  - Redis Dashboard: Dashboard ID ${CYAN}11835${NC}"
-    [[ "$INSTALL_MONGODB_EXPORTER" == true ]] && echo -e "  - MongoDB Overview: Dashboard ID ${CYAN}2583${NC}"
-    echo -e "  - Prometheus Stats: Dashboard ID ${CYAN}3662${NC}"
+    # Show dashboard recommendations only if Grafana was installed
+    if [[ "$INSTALL_GRAFANA" == true ]]; then
+        echo -e "${BOLD}Recommended Grafana Dashboards:${NC}"
+        [[ "$INSTALL_NODE_EXPORTER" == true ]] && echo -e "  - Node Exporter Full: Dashboard ID ${CYAN}1860${NC}"
+        [[ "$INSTALL_MYSQLD_EXPORTER" == true ]] && echo -e "  - MySQL Overview: Dashboard ID ${CYAN}7362${NC}"
+        [[ "$INSTALL_POSTGRES_EXPORTER" == true ]] && echo -e "  - PostgreSQL Database: Dashboard ID ${CYAN}9628${NC}"
+        [[ "$INSTALL_REDIS_EXPORTER" == true ]] && echo -e "  - Redis Dashboard: Dashboard ID ${CYAN}11835${NC}"
+        [[ "$INSTALL_MONGODB_EXPORTER" == true ]] && echo -e "  - MongoDB Overview: Dashboard ID ${CYAN}2583${NC}"
+        [[ "$INSTALL_PROMETHEUS" == true ]] && echo -e "  - Prometheus Stats: Dashboard ID ${CYAN}3662${NC}"
+    fi
+
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
 
     # Save to summary
-    cat >> /root/ubuntu-setup-summary.txt << EOF
+    echo "" >> /root/ubuntu-setup-summary.txt
+    echo "Monitoring Components:" >> /root/ubuntu-setup-summary.txt
 
-Monitoring Stack:
+    if [[ "$INSTALL_GRAFANA" == true ]]; then
+        cat >> /root/ubuntu-setup-summary.txt << EOF
   Grafana:
     URL: http://localhost:3000
     Username: admin
     Password: $GRAFANA_PASSWORD
 
+EOF
+    fi
+
+    if [[ "$INSTALL_PROMETHEUS" == true ]]; then
+        cat >> /root/ubuntu-setup-summary.txt << EOF
   Prometheus:
     URL: http://localhost:9090
     Config: /etc/prometheus/prometheus.yml
 
 EOF
+    fi
 
     [[ "$INSTALL_NODE_EXPORTER" == true ]] && echo "  node_exporter: http://localhost:9100/metrics" >> /root/ubuntu-setup-summary.txt
     [[ "$INSTALL_MYSQLD_EXPORTER" == true ]] && echo "  mysqld_exporter: http://localhost:9104/metrics" >> /root/ubuntu-setup-summary.txt
