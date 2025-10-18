@@ -343,6 +343,25 @@ apply_ssh_quick_hardening() {
 
     log_info "Applying SSH security hardening..."
 
+    # Change SSH port
+    if ask_yes_no "Change SSH port from default 22?" "y"; then
+        echo ""
+        read_prompt "Enter new SSH port [2222]: " new_port "2222"
+
+        # Validate port number
+        if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [[ "$new_port" -lt 1024 ]] || [[ "$new_port" -gt 65535 ]]; then
+            log_error "Invalid port number. Using 2222"
+            new_port="2222"
+        fi
+
+        update_ssh_config "Port" "$new_port"
+        log_success "SSH port changed to $new_port"
+        log_warning "Remember to allow port $new_port in firewall!"
+        log_info "UFW command: sudo ufw allow $new_port/tcp"
+    else
+        log_info "Keeping SSH port 22"
+    fi
+
     # Disable root login
     log_info "Disabling root login..."
     update_ssh_config "PermitRootLogin" "no"

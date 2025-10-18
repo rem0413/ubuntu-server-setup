@@ -111,12 +111,8 @@ confirm_installation() {
     echo "Components to install:"
     echo "$components"
     echo ""
-    printf "Continue? (y/n): "
 
-    read -r response || response="n"
-    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
-
-    if [[ "$response" == "y" || "$response" == "yes" ]]; then
+    if ask_yes_no "Continue?" "y"; then
         echo "Starting..."
         return 0
     else
