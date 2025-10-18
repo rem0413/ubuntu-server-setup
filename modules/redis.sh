@@ -97,14 +97,30 @@ EOF
     sed -i 's/^appendonly no/appendonly yes/' /etc/redis/redis.conf
 
     # Restart Redis
-    systemctl restart redis-server
+    log_info "Starting Redis server..."
+    systemctl restart redis-server >> /var/log/ubuntu-setup.log 2>&1
+
+    if [[ $? -ne 0 ]]; then
+        log_error "Failed to restart Redis"
+        log_info "Checking Redis logs..."
+        journalctl -u redis-server -n 50 --no-pager
+        return 1
+    fi
+
     systemctl enable redis-server >> /var/log/ubuntu-setup.log 2>&1
+
+    # Wait for Redis to start
+    sleep 2
 
     # Test Redis
     if systemctl is-active --quiet redis-server; then
         log_success "Redis installed and running"
     else
-        log_error "Redis installation failed"
+        log_error "Redis service not active"
+        log_info "Service status:"
+        systemctl status redis-server --no-pager
+        log_info "Recent logs:"
+        journalctl -u redis-server -n 20 --no-pager
         return 1
     fi
 
