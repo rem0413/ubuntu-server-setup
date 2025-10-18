@@ -108,31 +108,19 @@ confirm_installation() {
     local components="$1"
 
     echo ""
-    echo "========================================="
-    echo "  Installation Confirmation"
-    echo "========================================="
-    echo ""
-    echo "The following components will be installed:"
-    echo ""
+    echo "Components to install:"
     echo "$components"
     echo ""
-    echo "WARNING: This will modify your system configuration"
-    echo "Installation may take 10-30 minutes"
-    echo ""
-    printf "Continue? Type 'yes' to proceed: "
+    printf "Continue? (y/n): "
 
-    # Read response - stdin already redirected by remote-install.sh
-    local response=""
-    read -r response 2>/dev/null || response=""
+    read -r response || response="n"
     response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
 
-    if [[ "$response" == "yes" || "$response" == "y" ]]; then
-        echo ""
-        echo "Starting installation..."
+    if [[ "$response" == "y" || "$response" == "yes" ]]; then
+        echo "Starting..."
         return 0
     else
-        echo ""
-        echo "Installation cancelled"
+        echo "Cancelled"
         return 1
     fi
 }

@@ -138,15 +138,7 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 
 # Pass arguments to install.sh
-# Redirect stdin from /dev/tty to allow interactive input when piped from curl
-if [ -t 0 ]; then
-    # stdin is already a terminal
-    ./install.sh "$@"
-else
-    # stdin is piped, redirect entire script input from /dev/tty
-    exec < /dev/tty
-    ./install.sh "$@"
-fi
+./install.sh "$@" < /dev/tty 2>&1 || ./install.sh "$@"
 
 # Cleanup
 echo ""

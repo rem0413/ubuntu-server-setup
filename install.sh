@@ -59,6 +59,15 @@ parse_arguments() {
                 PROFILE="$2"
                 shift 2
                 ;;
+            --components)
+                # Accept space-separated component numbers
+                shift
+                SELECTED_COMPONENTS=()
+                while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                    SELECTED_COMPONENTS+=("$1")
+                    shift
+                done
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -84,11 +93,12 @@ Ubuntu Server Setup Automation Script
 Usage: $0 [OPTIONS]
 
 Options:
-    --all               Install all components without prompting
-    --dry-run           Show what would be installed without executing
-    --profile <name>    Use predefined profile (nodejs-app, docker-host, fullstack)
-    --help, -h          Show this help message
-    --version, -v       Show version information
+    --all                  Install all components
+    --components <nums>    Install specific components (e.g., --components 1 4 7 8)
+    --profile <name>       Use predefined profile (nodejs-app, docker-host, fullstack)
+    --dry-run              Show what would be installed without executing
+    --help, -h             Show this help message
+    --version, -v          Show version information
 
 Profiles:
     nodejs-app          Core + MongoDB + Node.js + PM2 + Nginx + Security
@@ -110,20 +120,22 @@ Components:
     12. Monitoring Stack (Prometheus/Grafana)
 
 Examples:
-    # Interactive installation
+    # Interactive mode (shows menu)
     sudo ./install.sh
 
     # Install all components
     sudo ./install.sh --all
 
-    # Dry-run to preview
-    sudo ./install.sh --dry-run
+    # Install specific components
+    sudo ./install.sh --components 1 4 7 8
 
     # Use predefined profile
     sudo ./install.sh --profile nodejs-app
 
     # Remote installation
-    curl -fsSL https://raw.githubusercontent.com/username/ubuntu-setup/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash
+    curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --all
+    curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --components 1 4 7 8
 
 EOF
 }
@@ -173,6 +185,12 @@ load_profile() {
 
 # Get user selections
 get_user_selections() {
+    # Components from --components flag take precedence
+    if [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]]; then
+        log_info "Using components from command line: ${SELECTED_COMPONENTS[*]}"
+        return 0
+    fi
+
     # Profile takes precedence
     if [[ -n "$PROFILE" ]]; then
         load_profile
@@ -185,109 +203,55 @@ get_user_selections() {
         return 0
     fi
 
-    # Check if we have a tty for interactive input
-    if ! tty -s 2>/dev/null; then
-        echo ""
-        echo "========================================="
-        echo "  ERROR: No Interactive Terminal"
-        echo "========================================="
-        echo ""
-        echo "Your environment does not support interactive input."
-        echo "Please use one of these options:"
-        echo ""
-        echo "1. Install all components:"
-        echo "   curl URL | sudo bash -s -- --all"
-        echo ""
-        echo "2. Use a profile:"
-        echo "   curl URL | sudo bash -s -- --profile nodejs-app"
-        echo "   curl URL | sudo bash -s -- --profile docker-host"
-        echo "   curl URL | sudo bash -s -- --profile fullstack"
-        echo "   curl URL | sudo bash -s -- --profile vpn-server"
-        echo ""
-        echo "3. SSH with terminal and clone:"
-        echo "   ssh -t user@server"
-        echo "   git clone https://github.com/rem0413/ubuntu-server-setup.git"
-        echo "   cd ubuntu-server-setup && sudo ./install.sh"
-        echo ""
-        exit 1
-    fi
-
-    # Try whiptail menu first
-    if command_exists whiptail; then
-        local choices=$(show_whiptail_menu)
-        if [[ "$choices" == "cancelled" ]]; then
-            log_info "Installation cancelled by user"
-            exit 0
-        fi
-        SELECTED_COMPONENTS=($choices)
-    else
-        # Fall back to simple menu
-        show_simple_selection_menu
-    fi
+    # Simple component selection - works everywhere
+    show_simple_selection_menu
 }
 
 # Simple selection menu
 show_simple_selection_menu() {
-    local done=false
-    local input=""
+    show_simple_menu
 
-    while [[ "$done" == false ]]; do
-        show_simple_menu
+    printf "Enter choice: "
+    read -r input || input=""
+    input=$(echo "$input" | xargs)
 
-        # Read input - should work now after exec redirect in remote-install.sh
-        read -r input 2>/dev/null || input=""
+    case "$input" in
+        0)
+            SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
+            echo "Installing all components"
+            ;;
+        q|Q)
+            echo "Cancelled"
+            exit 0
+            ;;
+        "")
+            echo "ERROR: No input. Use --all or --profile or --components"
+            echo "Examples:"
+            echo "  sudo ./install.sh --all"
+            echo "  sudo ./install.sh --profile nodejs-app"
+            echo "  sudo ./install.sh --components 1 4 7 8"
+            exit 1
+            ;;
+        *)
+            if [[ "$input" =~ ^[0-9\ ]+$ ]]; then
+                local temp_array=($input)
+                local valid=true
 
-        # Trim whitespace
-        input=$(echo "$input" | xargs)
-
-        case $input in
-            0)
-                SELECTED_COMPONENTS=(1 2 3 4 5 6 7 8 9 10 11 12)
-                echo "Selected: All components"
-                done=true
-                ;;
-            q|Q)
-                echo "Installation cancelled"
-                exit 0
-                ;;
-            "")
-                echo ""
-                echo "ERROR: No input received"
-                echo "Enter component numbers (e.g., 1 4 7 8) or 'q' to quit"
-                echo ""
-                ;;
-            *)
-                # Validate input: numbers separated by spaces
-                if [[ "$input" =~ ^[0-9\ ]+$ ]]; then
-                    # Convert to array and validate range
-                    local temp_array=($input)
-                    local valid=true
-
-                    for num in "${temp_array[@]}"; do
-                        if [[ $num -lt 1 || $num -gt 12 ]]; then
-                            valid=false
-                            echo ""
-                            echo "ERROR: Invalid number '$num' (valid: 1-12)"
-                            echo ""
-                            break
-                        fi
-                    done
-
-                    if [[ "$valid" == true ]]; then
-                        SELECTED_COMPONENTS=($input)
-                        echo "Selected components: $input"
-                        done=true
+                for num in "${temp_array[@]}"; do
+                    if [[ $num -lt 1 || $num -gt 12 ]]; then
+                        echo "ERROR: Invalid number '$num' (valid: 1-12)"
+                        exit 1
                     fi
-                else
-                    echo ""
-                    echo "ERROR: Invalid format"
-                    echo "Enter numbers only (e.g., 1 4 7 8)"
-                    echo "Or: 0 = all, q = quit"
-                    echo ""
-                fi
-                ;;
-        esac
-    done
+                done
+
+                SELECTED_COMPONENTS=($input)
+                echo "Selected: $input"
+            else
+                echo "ERROR: Invalid format. Use numbers (e.g., 1 4 7 8)"
+                exit 1
+            fi
+            ;;
+    esac
 }
 
 # Confirm selections
