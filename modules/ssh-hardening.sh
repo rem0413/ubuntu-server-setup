@@ -356,8 +356,47 @@ apply_ssh_quick_hardening() {
 
         update_ssh_config "Port" "$new_port"
         log_success "SSH port changed to $new_port"
-        log_warning "Remember to allow port $new_port in firewall!"
-        log_info "UFW command: sudo ufw allow $new_port/tcp"
+
+        # Configure firewall for new SSH port
+        if command_exists ufw; then
+            log_info "Configuring firewall for SSH port $new_port..."
+
+            # Allow new SSH port
+            ufw allow "$new_port/tcp" comment 'SSH' >> /var/log/ubuntu-setup.log 2>&1
+            log_success "Firewall rule added for port $new_port"
+
+            # Enable UFW if not already enabled
+            if ! ufw status | grep -q "Status: active"; then
+                log_info "Enabling UFW firewall..."
+                # Set default policies
+                ufw default deny incoming >> /var/log/ubuntu-setup.log 2>&1
+                ufw default allow outgoing >> /var/log/ubuntu-setup.log 2>&1
+                # Enable firewall
+                echo "y" | ufw enable >> /var/log/ubuntu-setup.log 2>&1
+                log_success "UFW firewall enabled"
+            fi
+
+            # Remove old port 22 rule if new port is different
+            if [[ "$new_port" != "22" ]]; then
+                if ufw status numbered | grep -q "^\\[[0-9]\\+\\].*22/tcp"; then
+                    log_info "Removing old SSH port 22 from firewall..."
+                    # Get rule numbers for port 22 and delete them
+                    ufw status numbered | grep "22/tcp" | grep -v "# SSH" | awk '{print $1}' | tr -d '[]' | sort -rn | while read rule_num; do
+                        echo "y" | ufw delete "$rule_num" >> /var/log/ubuntu-setup.log 2>&1
+                    done 2>/dev/null || true
+                fi
+            fi
+
+            echo ""
+            log_info "Current firewall status:"
+            ufw status numbered | head -10
+        else
+            log_warning "UFW not installed. Install Security Tools to enable firewall protection."
+        fi
+
+        echo ""
+        log_warning "IMPORTANT: You will need to reconnect using port $new_port"
+        log_info "New SSH command: ssh -p $new_port user@server"
     else
         log_info "Keeping SSH port 22"
     fi
