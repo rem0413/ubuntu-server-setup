@@ -120,8 +120,11 @@ configure_ssh_hardening() {
                 sshd -t 2>&1
 
                 log_info "Restoring backup..."
-                local backup_file=$(ls -t "$sshd_config.bak."* 2>/dev/null | head -1)
-                if [[ -f "$backup_file" ]]; then
+                # Backup is stored in /var/backups/ubuntu-setup/ by backup_config function
+                local backup_dir="/var/backups/ubuntu-setup"
+                local backup_file=$(ls -t "$backup_dir/sshd_config."*.bak 2>/dev/null | head -1)
+
+                if [[ -n "$backup_file" ]] && [[ -f "$backup_file" ]]; then
                     cp "$backup_file" "$sshd_config"
                     log_info "Restored from: $backup_file"
                     systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
@@ -129,9 +132,13 @@ configure_ssh_hardening() {
                         log_success "SSH service restored successfully"
                     else
                         log_error "Failed to restore SSH service"
+                        log_info "Check config manually: /etc/ssh/sshd_config"
                     fi
                 else
-                    log_error "No backup file found to restore"
+                    log_error "No backup file found in $backup_dir"
+                    log_warning "SSH config may be in invalid state"
+                    log_info "Backup directory contents:"
+                    ls -lah "$backup_dir" 2>/dev/null || echo "  Directory not found"
                 fi
                 return 1
             fi
@@ -376,9 +383,8 @@ apply_ssh_quick_hardening() {
     update_ssh_config "LoginGraceTime" "30"
     log_success "Login grace time set to 30 seconds"
 
-    # Enforce SSH Protocol 2
-    update_ssh_config "Protocol" "2"
-    log_success "SSH Protocol 2 enforced"
+    # Note: Protocol directive removed in OpenSSH 7.4+ (SSH-2 is the only protocol)
+    # No need to set Protocol 2 anymore
 
     # Configure allowed users
     if grep -q "^AllowUsers" "$sshd_config"; then

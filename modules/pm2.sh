@@ -50,12 +50,26 @@ install_pm2() {
     export PATH="$npm_bin:$PATH:/usr/local/bin:/usr/bin"
     hash -r 2>/dev/null || true
 
-    # Create symlink if pm2 not in PATH
-    if ! command -v pm2 >/dev/null 2>&1; then
-        if [[ -f "$npm_bin/pm2" ]]; then
-            ln -sf "$npm_bin/pm2" /usr/local/bin/pm2 2>/dev/null || true
-            log_info "Created symlink: /usr/local/bin/pm2"
+    # Ensure PM2 is accessible globally for all users
+    if [[ -f "$npm_bin/pm2" ]]; then
+        # Create symlink to /usr/local/bin (in all users' PATH)
+        ln -sf "$npm_bin/pm2" /usr/local/bin/pm2 2>/dev/null || true
+        chmod +x /usr/local/bin/pm2 2>/dev/null || true
+        log_info "PM2 symlinked to /usr/local/bin/pm2 (global access)"
+    fi
+
+    # Add npm bin to global PATH if not already there
+    if ! grep -q "$npm_bin" /etc/environment 2>/dev/null; then
+        # Backup /etc/environment
+        cp /etc/environment /etc/environment.bak.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+
+        # Add npm bin to PATH in /etc/environment
+        if grep -q "^PATH=" /etc/environment; then
+            sed -i "s|PATH=\"|PATH=\"$npm_bin:|" /etc/environment
+        else
+            echo "PATH=\"$npm_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"" >> /etc/environment
         fi
+        log_info "Added npm bin to global PATH in /etc/environment"
     fi
 
     # Wait a moment for installation to complete
