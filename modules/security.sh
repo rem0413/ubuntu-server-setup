@@ -91,7 +91,16 @@ configure_ufw() {
     # PostgreSQL
     if command_exists psql; then
         detected_count=$((detected_count + 1))
-        local pg_port=$(sudo -u postgres psql -t -c "SHOW port;" 2>/dev/null | xargs || echo "5432")
+
+        # Detect port from config file (more reliable than psql query)
+        local pg_version=$(dpkg -l | grep postgresql | grep -oP 'postgresql-\\K[0-9]+' | head -1)
+        local pg_config="/etc/postgresql/$pg_version/main/postgresql.conf"
+        local pg_port="5432"
+
+        if [[ -f "$pg_config" ]]; then
+            pg_port=$(grep -E "^port\s*=" "$pg_config" 2>/dev/null | awk '{print $3}' || echo "5432")
+        fi
+
         log_info "✓ PostgreSQL detected on port $pg_port"
         if ask_yes_no "Allow PostgreSQL ($pg_port)?" "n"; then
             ufw allow "$pg_port/tcp" comment 'PostgreSQL' >> "$LOG_FILE" 2>&1
@@ -245,7 +254,15 @@ manage_ufw_ports() {
     # PostgreSQL
     if command_exists psql; then
         detected_count=$((detected_count + 1))
-        local pg_port=$(sudo -u postgres psql -t -c "SHOW port;" 2>/dev/null | xargs || echo "5432")
+
+        # Detect port from config file (more reliable than psql query)
+        local pg_version=$(dpkg -l | grep postgresql | grep -oP 'postgresql-\\K[0-9]+' | head -1)
+        local pg_config="/etc/postgresql/$pg_version/main/postgresql.conf"
+        local pg_port="5432"
+
+        if [[ -f "$pg_config" ]]; then
+            pg_port=$(grep -E "^port\s*=" "$pg_config" 2>/dev/null | awk '{print $3}' || echo "5432")
+        fi
 
         if ! ufw status | grep -q "^${pg_port}/tcp"; then
             log_info "✓ PostgreSQL detected on port $pg_port"
