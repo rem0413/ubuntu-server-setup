@@ -129,10 +129,31 @@ configure_postgresql_user() {
             fi
         fi
 
-        # Display credentials on screen (not saved to file)
+        # Save credentials to file
+        local cred_file="/root/postgresql-credentials.txt"
+        cat > "$cred_file" << EOF
+PostgreSQL Credentials
+======================
+Generated: $(date)
+
+Username: $db_user
+Password: $db_pass
+Database: ${db_name:-postgres}
+Port:     $pg_port
+
+Connection string:
+postgresql://$db_user:$db_pass@localhost:$pg_port/${db_name:-postgres}
+
+psql command:
+PGPASSWORD='$db_pass' psql -h localhost -p $pg_port -U $db_user -d ${db_name:-postgres}
+
+EOF
+        chmod 600 "$cred_file"
+
+        # Display credentials on screen
         echo ""
         echo -e "${BOLD}${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${BOLD}${GREEN}     PostgreSQL Credentials (SAVE THIS NOW!)${NC}"
+        echo -e "${BOLD}${GREEN}     PostgreSQL Credentials${NC}"
         echo -e "${BOLD}${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
         echo -e "${BOLD}Username:${NC} ${CYAN}$db_user${NC}"
@@ -152,14 +173,13 @@ configure_postgresql_user() {
         echo -e "${YELLOW}psql command:${NC}"
         echo -e "${DIM}PGPASSWORD='$db_pass' psql -h localhost -p $pg_port -U $db_user -d ${db_name:-postgres}${NC}"
         echo ""
-        echo -e "${RED}${BOLD}⚠ WARNING:${NC} ${RED}This password will NOT be saved to any file!${NC}"
-        echo -e "${RED}           Copy it now or you will lose access!${NC}"
+        echo -e "${GREEN}${BOLD}✓ Credentials saved to:${NC} ${CYAN}$cred_file${NC}"
         echo ""
         echo -e "${BOLD}${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
 
-        # Wait for user to copy
-        printf "Press Enter after you have saved these credentials..." >/dev/tty
+        # Wait for user acknowledgment
+        printf "Press Enter to continue..." >/dev/tty
         read -r </dev/tty
 
         if [[ "$db_user" == "postgres" ]]; then
@@ -173,7 +193,11 @@ configure_postgresql_user() {
             configure_postgresql_remote "$pg_port"
         fi
     else
-        log_error "Failed to create PostgreSQL user"
+        if [[ "$db_user" == "postgres" ]]; then
+            log_error "Failed to set password for PostgreSQL user"
+        else
+            log_error "Failed to create PostgreSQL user"
+        fi
         return 1
     fi
 
