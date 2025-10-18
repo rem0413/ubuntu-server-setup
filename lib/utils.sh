@@ -40,6 +40,14 @@ log_warning() {
     echo "[WARN] $(date '+%Y-%m-%d %H:%M:%S') - $message" >> "$LOG_FILE"
 }
 
+log_step() {
+    local message="$1"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}▶ ${message}${NC}"
+    echo ""
+    echo "[STEP] $(date '+%Y-%m-%d %H:%M:%S') - $message" >> "$LOG_FILE"
+}
+
 # Check if running as root or with sudo
 check_root() {
     if [[ $EUID -ne 0 ]]; then
