@@ -185,6 +185,33 @@ get_user_selections() {
         return 0
     fi
 
+    # Check if we have a tty for interactive input
+    if ! tty -s 2>/dev/null; then
+        echo ""
+        echo "========================================="
+        echo "  ERROR: No Interactive Terminal"
+        echo "========================================="
+        echo ""
+        echo "Your environment does not support interactive input."
+        echo "Please use one of these options:"
+        echo ""
+        echo "1. Install all components:"
+        echo "   curl URL | sudo bash -s -- --all"
+        echo ""
+        echo "2. Use a profile:"
+        echo "   curl URL | sudo bash -s -- --profile nodejs-app"
+        echo "   curl URL | sudo bash -s -- --profile docker-host"
+        echo "   curl URL | sudo bash -s -- --profile fullstack"
+        echo "   curl URL | sudo bash -s -- --profile vpn-server"
+        echo ""
+        echo "3. SSH with terminal and clone:"
+        echo "   ssh -t user@server"
+        echo "   git clone https://github.com/rem0413/ubuntu-server-setup.git"
+        echo "   cd ubuntu-server-setup && sudo ./install.sh"
+        echo ""
+        exit 1
+    fi
+
     # Try whiptail menu first
     if command_exists whiptail; then
         local choices=$(show_whiptail_menu)

@@ -4,26 +4,45 @@ Automated setup script for Ubuntu 24.04 LTS servers with simple terminal menu. Q
 
 ## Quick Start
 
-### Remote Installation (Recommended)
+### 🚀 Fastest Way (Quick Menu)
 
 ```bash
-# Interactive menu
-curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/quick-install.sh | bash
+```
 
-# Install all components
-curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --all
+Shows a simple menu (1-5), just pick a number!
 
-# Use profile (recommended)
+### ⚡ Direct Installation (One Command)
+
+**Node.js Stack:**
+```bash
 curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --profile nodejs-app
 ```
 
-### Local Installation
+**Docker Host:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --profile docker-host
+```
+
+**Full Stack:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --profile fullstack
+```
+
+**Install Everything:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --all
+```
+
+### 🔧 Custom Components
 
 ```bash
 git clone https://github.com/rem0413/ubuntu-server-setup.git
 cd ubuntu-server-setup
 sudo ./install.sh
 ```
+
+See [QUICK_START.md](QUICK_START.md) for detailed guide.
 
 ## Features
 
