@@ -366,8 +366,13 @@ EOF
     log_info "Installing Grafana..."
 
     apt-get install -y software-properties-common >> /var/log/ubuntu-setup.log 2>&1
-    wget -q -O - https://packages.grafana.com/gpg.key | apt-key add - >> /var/log/ubuntu-setup.log 2>&1
-    echo "deb https://packages.grafana.com/oss/deb stable main" | tee /etc/apt/sources.list.d/grafana.list
+
+    # Use modern apt keyring method (not deprecated apt-key)
+    wget -q -O - https://packages.grafana.com/gpg.key | \
+        gpg --dearmor -o /usr/share/keyrings/grafana.gpg >> /var/log/ubuntu-setup.log 2>&1
+
+    echo "deb [signed-by=/usr/share/keyrings/grafana.gpg] https://packages.grafana.com/oss/deb stable main" | \
+        tee /etc/apt/sources.list.d/grafana.list >> /var/log/ubuntu-setup.log
 
     apt-get update >> /var/log/ubuntu-setup.log 2>&1
     apt-get install -y grafana >> /var/log/ubuntu-setup.log 2>&1

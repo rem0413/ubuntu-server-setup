@@ -32,8 +32,14 @@ install_mongodb() {
         return 1
     fi
 
-    # Add MongoDB repository
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | \
+    # Add MongoDB repository (use jammy for noble compatibility)
+    local ubuntu_codename=$(lsb_release -cs)
+    if [[ "$ubuntu_codename" == "noble" ]]; then
+        ubuntu_codename="jammy"
+        log_info "Using jammy repository for Ubuntu 24.04 compatibility"
+    fi
+
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${ubuntu_codename}/mongodb-org/7.0 multiverse" | \
         sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list >> "$LOG_FILE"
 
     # Update package lists

@@ -157,12 +157,27 @@ create_ssh_user() {
 
     log_success "User '$username' created"
 
-    # Set password
-    echo ""
-    log_info "Setting password for '$username'"
-    echo -e "${YELLOW}Choose a strong password${NC}"
+    # Generate random password
+    log_info "Generating random password for '$username'..."
+    local user_password=$(generate_password 24)
 
-    if passwd "$username"; then
+    echo "$username:$user_password" | chpasswd
+
+    if [[ $? -eq 0 ]]; then
+        echo ""
+        echo "========================================="
+        echo "  User Credentials (SAVE THIS NOW!)"
+        echo "========================================="
+        echo ""
+        echo "Username: $username"
+        echo "Password: $user_password"
+        echo ""
+        echo "WARNING: This password will NOT be saved!"
+        echo "         Copy it now or you will lose access!"
+        echo ""
+        echo "========================================="
+        echo ""
+        read -p "Press Enter after saving the password..."
         log_success "Password set"
     else
         log_error "Failed to set password"
