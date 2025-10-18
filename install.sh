@@ -207,12 +207,8 @@ show_simple_selection_menu() {
     while [[ "$done" == false ]]; do
         show_simple_menu
 
-        # Read input - handle both terminal and piped scenarios
-        if [ -t 0 ]; then
-            read -r input
-        else
-            read -r input < /dev/tty 2>/dev/null || input=""
-        fi
+        # Read input - should work now after exec redirect in remote-install.sh
+        read -r input 2>/dev/null || input=""
 
         # Trim whitespace
         input=$(echo "$input" | xargs)

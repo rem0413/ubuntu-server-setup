@@ -121,14 +121,9 @@ confirm_installation() {
     echo ""
     printf "Continue? Type 'yes' to proceed: "
 
-    # Read with timeout, handle piped input
+    # Read response - stdin already redirected by remote-install.sh
     local response=""
-    if [ -t 0 ]; then
-        read -r response
-    else
-        read -r response < /dev/tty 2>/dev/null || response=""
-    fi
-
+    read -r response 2>/dev/null || response=""
     response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
 
     if [[ "$response" == "yes" || "$response" == "y" ]]; then
@@ -205,12 +200,7 @@ ask_yes_no() {
     echo -n "$question $prompt: "
 
     local response=""
-    if [ -t 0 ]; then
-        read -r response
-    else
-        read -r response < /dev/tty 2>/dev/null || response="$default"
-    fi
-
+    read -r response 2>/dev/null || response="$default"
     response=${response:-$default}
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -229,23 +219,15 @@ get_input() {
 
     if [[ "$secret" == "true" ]]; then
         echo -n "$prompt: "
-        if [ -t 0 ]; then
-            read -s response
-        else
-            read -s response < /dev/tty 2>/dev/null || response=""
-        fi
+        read -s response 2>/dev/null || response=""
         echo ""
     else
         echo -n "$prompt"
         if [[ -n "$default" ]]; then
-            echo -n " ${DIM}[$default]${NC}"
+            echo -n " [$default]"
         fi
         echo -n ": "
-        if [ -t 0 ]; then
-            read -r response
-        else
-            read -r response < /dev/tty 2>/dev/null || response=""
-        fi
+        read -r response 2>/dev/null || response=""
     fi
 
     echo "${response:-$default}"

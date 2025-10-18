@@ -143,8 +143,9 @@ if [ -t 0 ]; then
     # stdin is already a terminal
     ./install.sh "$@"
 else
-    # stdin is piped, redirect from /dev/tty for interactive input
-    ./install.sh "$@" < /dev/tty
+    # stdin is piped, redirect entire script input from /dev/tty
+    exec < /dev/tty
+    ./install.sh "$@"
 fi
 
 # Cleanup
