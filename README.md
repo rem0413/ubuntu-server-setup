@@ -4,7 +4,24 @@ Automated setup script for Ubuntu 24.04 LTS servers with simple terminal menu. Q
 
 ## Quick Start
 
-### 🚀 Fastest Way (Quick Menu)
+### ⭐ Global Install (Recommended)
+
+Install as a global `ubuntu-setup` command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/install-global.sh | sudo bash
+```
+
+Then use anywhere:
+```bash
+ubuntu-setup install --all
+ubuntu-setup install --profile nodejs-app
+ubuntu-setup update
+```
+
+See [GLOBAL_INSTALL.md](GLOBAL_INSTALL.md) for details.
+
+### 🚀 One-Time Remote Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/quick-install.sh | bash
