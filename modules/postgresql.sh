@@ -91,28 +91,41 @@ configure_postgresql_user() {
     local pg_port="$1"
     log_info "Configuring PostgreSQL user..."
 
-    local db_user=$(get_input "Database username" "dbadmin")
+    local db_user=$(get_input "Database username" "postgres")
 
     # Generate random password
     local db_pass=$(generate_password 20)
     log_info "Generated random password (20 characters)"
 
-    # Create PostgreSQL user
-    sudo -u postgres psql -p "$pg_port" -c "CREATE USER $db_user WITH PASSWORD '$db_pass' SUPERUSER CREATEDB CREATEROLE;" >> "$LOG_FILE" 2>&1
+    # Create or update PostgreSQL user
+    if [[ "$db_user" == "postgres" ]]; then
+        # postgres user already exists, just set password
+        sudo -u postgres psql -p "$pg_port" -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" >> "$LOG_FILE" 2>&1
+        local create_result=$?
+    else
+        # Create new user
+        sudo -u postgres psql -p "$pg_port" -c "CREATE USER $db_user WITH PASSWORD '$db_pass' SUPERUSER CREATEDB CREATEROLE;" >> "$LOG_FILE" 2>&1
+        local create_result=$?
+    fi
 
-    if [[ $? -eq 0 ]]; then
+    if [[ $create_result -eq 0 ]]; then
         local db_name=""
 
-        # Create database for user
-        if ask_yes_no "Create database for user?" "y"; then
-            db_name=$(get_input "Database name" "$db_user")
-            sudo -u postgres psql -p "$pg_port" -c "CREATE DATABASE $db_name OWNER $db_user;" >> "$LOG_FILE" 2>&1
+        # Create database for user (skip if user is postgres - database already exists)
+        if [[ "$db_user" == "postgres" ]]; then
+            db_name="postgres"
+            log_info "Using existing 'postgres' database"
+        else
+            if ask_yes_no "Create database for user?" "y"; then
+                db_name=$(get_input "Database name" "postgres")
+                sudo -u postgres psql -p "$pg_port" -c "CREATE DATABASE $db_name OWNER $db_user;" >> "$LOG_FILE" 2>&1
 
-            if [[ $? -eq 0 ]]; then
-                log_success "Database created: $db_name"
-            else
-                log_error "Failed to create database"
-                db_name=""
+                if [[ $? -eq 0 ]]; then
+                    log_success "Database created: $db_name"
+                else
+                    log_error "Failed to create database"
+                    db_name=""
+                fi
             fi
         fi
 
@@ -149,7 +162,11 @@ configure_postgresql_user() {
         printf "Press Enter after you have saved these credentials..." >/dev/tty
         read -r </dev/tty
 
-        log_success "PostgreSQL user created: $db_user"
+        if [[ "$db_user" == "postgres" ]]; then
+            log_success "PostgreSQL password set for user: $db_user"
+        else
+            log_success "PostgreSQL user created: $db_user"
+        fi
 
         # Configure remote access
         if ask_yes_no "Allow remote connections?" "n"; then
