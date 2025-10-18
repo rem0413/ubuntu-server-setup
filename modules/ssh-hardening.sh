@@ -26,8 +26,9 @@ configure_ssh_hardening() {
     echo "  2) Create SSH user (disable root login)"
     echo "  3) Add/manage SSH keys"
     echo "  4) Change SSH port"
-    echo "  5) Show current configuration"
-    echo "  6) Cancel"
+    echo "  5) Setup SFTP user (file transfer only)"
+    echo "  6) Show current configuration"
+    echo "  7) Cancel"
     echo ""
 
     read_prompt "Choice [1]: " choice "1"
@@ -75,6 +76,10 @@ configure_ssh_hardening() {
             change_ssh_port
             ;;
         5)
+            setup_sftp_user
+            return 0
+            ;;
+        6)
             show_ssh_config
             return 0
             ;;
@@ -722,4 +727,180 @@ show_ssh_config() {
     done
 
     echo ""
+}
+
+################################################################################
+# SFTP Configuration
+################################################################################
+
+setup_sftp_user() {
+    log_info "SFTP User Setup (File Transfer Only)"
+    echo ""
+
+    # Get username
+    read_prompt "SFTP username: " sftp_user ""
+    if [[ -z "$sftp_user" ]]; then
+        log_error "Username is required"
+        return 1
+    fi
+
+    # Check if user exists
+    if id "$sftp_user" &>/dev/null; then
+        log_warning "User '$sftp_user' already exists"
+        if ! ask_yes_no "Configure existing user for SFTP?" "y"; then
+            return 0
+        fi
+        local user_exists=true
+    else
+        local user_exists=false
+    fi
+
+    # SFTP directory
+    local sftp_root="/sftp"
+    read_prompt "SFTP root directory [$sftp_root]: " sftp_root "$sftp_root"
+
+    local user_home="$sftp_root/$sftp_user"
+    local upload_dir="$user_home/upload"
+
+    # Create user if not exists
+    if [[ "$user_exists" == false ]]; then
+        log_info "Creating SFTP user '$sftp_user'..."
+
+        # Create user with no shell (SFTP only)
+        useradd -m -d "$user_home" -s /usr/sbin/nologin "$sftp_user"
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Failed to create user"
+            return 1
+        fi
+
+        log_success "User '$sftp_user' created"
+
+        # Set password
+        log_info "Generating random password..."
+        local user_password=$(generate_password 24)
+
+        echo "$sftp_user:$user_password" | chpasswd
+
+        if [[ $? -eq 0 ]]; then
+            echo ""
+            echo "========================================="
+            echo "  SFTP User Credentials (SAVE THIS!)"
+            echo "========================================="
+            echo ""
+            echo "Username: $sftp_user"
+            echo "Password: $user_password"
+            echo "SFTP Directory: $upload_dir"
+            echo ""
+            echo "WARNING: Password will NOT be saved!"
+            echo ""
+            echo "Connect with: sftp $sftp_user@server"
+            echo "========================================="
+            echo ""
+            printf "Press Enter after saving..." >/dev/tty
+            read -r </dev/tty
+            log_success "Password set"
+        else
+            log_error "Failed to set password"
+            return 1
+        fi
+    fi
+
+    # Create SFTP directory structure
+    log_info "Setting up SFTP directory structure..."
+
+    # Create root (owned by root)
+    mkdir -p "$sftp_root"
+    chown root:root "$sftp_root"
+    chmod 755 "$sftp_root"
+
+    # Create user home (owned by root for chroot)
+    mkdir -p "$user_home"
+    chown root:root "$user_home"
+    chmod 755 "$user_home"
+
+    # Create upload directory (owned by user)
+    mkdir -p "$upload_dir"
+    chown "$sftp_user:$sftp_user" "$upload_dir"
+    chmod 755 "$upload_dir"
+
+    log_success "Directory structure created"
+    log_info "  Root: $sftp_root (root:root)"
+    log_info "  Home: $user_home (root:root)"
+    log_info "  Upload: $upload_dir ($sftp_user:$sftp_user)"
+
+    # Configure SSH for SFTP
+    log_info "Configuring SSH for SFTP..."
+
+    local sshd_config="/etc/ssh/sshd_config"
+    backup_config "$sshd_config"
+
+    # Check if SFTP subsystem is configured
+    if ! grep -q "^Subsystem[[:space:]]*sftp" "$sshd_config"; then
+        echo "Subsystem sftp internal-sftp" >> "$sshd_config"
+    fi
+
+    # Add Match User block for chroot
+    if ! grep -q "Match User $sftp_user" "$sshd_config"; then
+        cat >> "$sshd_config" << EOF
+
+# SFTP chroot for $sftp_user
+Match User $sftp_user
+    ChrootDirectory $user_home
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+    PermitTunnel no
+EOF
+        log_success "SFTP configuration added"
+    else
+        log_warning "SFTP configuration already exists for $sftp_user"
+    fi
+
+    # Test configuration
+    log_info "Testing SSH configuration..."
+    local test_output=$(sshd -t 2>&1)
+
+    if [[ $? -eq 0 ]]; then
+        log_success "SSH configuration is valid"
+
+        # Restart SSH
+        echo ""
+        if ask_yes_no "Restart SSH to apply SFTP configuration?" "y"; then
+            # Detect SSH service name
+            local ssh_service="ssh"
+            if systemctl list-unit-files | grep -q "^sshd.service"; then
+                ssh_service="sshd"
+            fi
+
+            systemctl daemon-reload >> /var/log/ubuntu-setup.log 2>&1
+            systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
+            sleep 2
+
+            if systemctl is-active --quiet "$ssh_service"; then
+                log_success "SSH service restarted successfully"
+
+                echo ""
+                log_success "SFTP User Setup Complete!"
+                echo ""
+                log_info "Connection details:"
+                echo "  Command: sftp $sftp_user@$(hostname -I | awk '{print $1}')"
+                echo "  Upload to: /upload directory"
+                echo ""
+                log_info "Test connection:"
+                echo "  sftp> cd upload"
+                echo "  sftp> put yourfile.txt"
+                echo ""
+            else
+                log_error "SSH service failed to start"
+                return 1
+            fi
+        fi
+    else
+        log_error "SSH configuration test failed!"
+        echo "$test_output"
+        return 1
+    fi
+
+    return 0
 }
