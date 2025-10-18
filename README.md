@@ -1,6 +1,29 @@
 # Ubuntu Server Setup Automation
 
-Automated setup script for Ubuntu 24.04 LTS servers with interactive CLI dashboard. Quickly provision VPS instances with common development tools and databases.
+Automated setup script for Ubuntu 24.04 LTS servers with simple terminal menu. Quickly provision VPS instances with common development tools and databases.
+
+## Quick Start
+
+### Remote Installation (Recommended)
+
+```bash
+# Interactive menu
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash
+
+# Install all components
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --all
+
+# Use profile (recommended)
+curl -fsSL https://raw.githubusercontent.com/rem0413/ubuntu-server-setup/master/remote-install.sh | sudo bash -s -- --profile nodejs-app
+```
+
+### Local Installation
+
+```bash
+git clone https://github.com/rem0413/ubuntu-server-setup.git
+cd ubuntu-server-setup
+sudo ./install.sh
+```
 
 ## Features
 
