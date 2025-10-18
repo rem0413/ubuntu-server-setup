@@ -18,21 +18,24 @@ install_monitoring() {
 
     # Interactive menu for component selection
     echo ""
-    echo -e "${BOLD}Select monitoring components to install:${NC}"
+    echo "Select monitoring components:"
     echo ""
-    echo "  1) Prometheus (required)"
-    echo "  2) Grafana (required)"
-    echo "  3) node_exporter (system metrics)"
-    echo "  4) mysqld_exporter (MySQL/MariaDB metrics)"
-    echo "  5) postgres_exporter (PostgreSQL metrics)"
-    echo "  6) redis_exporter (Redis metrics)"
-    echo "  7) mongodb_exporter (MongoDB metrics)"
+    echo "  1) Prometheus (metrics database)"
+    echo "  2) Grafana (visualization dashboard)"
+    echo "  3) node_exporter (system metrics exporter)"
+    echo "  4) mysqld_exporter (MySQL metrics exporter)"
+    echo "  5) postgres_exporter (PostgreSQL metrics exporter)"
+    echo "  6) redis_exporter (Redis metrics exporter)"
+    echo "  7) mongodb_exporter (MongoDB metrics exporter)"
     echo ""
     echo "  0) Install all"
     echo "  q) Cancel"
     echo ""
+    echo "Note: Exporters work standalone and can export to any monitoring system"
+    echo ""
 
-    read -p "Enter selections (space-separated, e.g., 1 2 3): " selections
+    printf "Enter selections (e.g., 1 2 3 or just 3 for exporter only): "
+    read -r selections
 
     case "$selections" in
         q|Q)
@@ -71,16 +74,7 @@ install_monitoring() {
             ;;
     esac
 
-    # Prometheus and Grafana are required
-    if [[ "$INSTALL_PROMETHEUS" != true ]]; then
-        log_warning "Prometheus is required, enabling automatically"
-        INSTALL_PROMETHEUS=true
-    fi
-
-    if [[ "$INSTALL_GRAFANA" != true ]]; then
-        log_warning "Grafana is required, enabling automatically"
-        INSTALL_GRAFANA=true
-    fi
+    # Exporters are standalone - no requirements
 
     # Create monitoring user
     if ! id -u prometheus &>/dev/null; then
