@@ -473,9 +473,12 @@ update_ssh_config() {
     local value="$2"
     local sshd_config="/etc/ssh/sshd_config"
 
-    if grep -q "^#*${key}" "$sshd_config"; then
-        sed -i "s/^#*${key}.*/${key} ${value}/" "$sshd_config"
+    # Check if key exists (commented or uncommented, with optional spaces)
+    if grep -qE "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]" "$sshd_config"; then
+        # Replace existing line (handles #Port 22, Port 22, # Port 22, etc.)
+        sed -i "s|^[[:space:]]*#*[[:space:]]*${key}[[:space:]].*|${key} ${value}|" "$sshd_config"
     else
+        # Append new line
         echo "${key} ${value}" >> "$sshd_config"
     fi
 }
