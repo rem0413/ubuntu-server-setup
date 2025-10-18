@@ -185,12 +185,16 @@ ask_yes_no() {
         prompt="[y/N]"
     fi
 
-    echo ""
-    echo "$question"
-    printf "%s: " "$prompt"
+    # Output prompt to /dev/tty for visibility
+    {
+        echo ""
+        echo "$question"
+        printf "%s: " "$prompt"
+    } >/dev/tty
 
+    # Read from /dev/tty
     local response=""
-    read -r response 2>/dev/null || response="$default"
+    read -r response </dev/tty 2>/dev/null || response="$default"
     response=${response:-$default}
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -207,28 +211,36 @@ get_input() {
     local secret="${3:-false}"
     local response=""
 
-    echo ""
-    echo "========================================="
-
-    if [[ "$secret" == "true" ]]; then
-        echo "$prompt"
-        echo "========================================="
-        printf "Enter (hidden): "
-        read -s response 2>/dev/null || response=""
+    # Output all prompts to /dev/tty to ensure visibility
+    {
         echo ""
-    else
-        echo "$prompt"
-        if [[ -n "$default" ]]; then
-            echo "Default: $default"
-            echo "Press Enter to use default, or type new value"
-        else
-            echo "Required - please enter a value"
-        fi
         echo "========================================="
-        printf "> "
-        read -r response 2>/dev/null || response=""
+
+        if [[ "$secret" == "true" ]]; then
+            echo "$prompt"
+            echo "========================================="
+            printf "Enter (hidden): "
+        else
+            echo "$prompt"
+            if [[ -n "$default" ]]; then
+                echo "Default: $default"
+                echo "Press Enter to use default, or type new value"
+            else
+                echo "Required - please enter a value"
+            fi
+            echo "========================================="
+            printf "> "
+        fi
+    } >/dev/tty
+
+    # Read from /dev/tty
+    if [[ "$secret" == "true" ]]; then
+        read -s response </dev/tty 2>/dev/null || response=""
+        echo "" >/dev/tty
+    else
+        read -r response </dev/tty 2>/dev/null || response=""
     fi
 
-    echo ""
+    # Return the value (this goes to stdout for capture)
     echo "${response:-$default}"
 }
