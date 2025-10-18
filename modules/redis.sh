@@ -130,6 +130,37 @@ EOF
         log_warning "Redis authentication test failed"
     fi
 
+    # Save credentials to file
+    local cred_file="/root/redis-credentials.txt"
+    cat > "$cred_file" << EOF
+Redis Credentials
+=================
+Generated: $(date)
+
+Mode:     Standalone
+Port:     $port
+Password: $password
+Bind:     127.0.0.1 (localhost only)
+
+Connection strings:
+# CLI
+redis-cli -p $port -a '$password'
+
+# Node.js
+redis://default:$password@localhost:$port
+
+# Python
+redis.Redis(host='localhost', port=$port, password='$password')
+
+Configuration:
+Config file: /etc/redis/redis.conf
+Persistence: Enabled (AOF)
+Max memory:  256MB
+Eviction:    allkeys-lru
+
+EOF
+    chmod 600 "$cred_file"
+
     # Display info
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
@@ -141,11 +172,10 @@ EOF
     echo -e "${BOLD}Bind Address:${NC} 127.0.0.1 (localhost only)"
     echo -e "${BOLD}Port:${NC} $port"
     echo ""
-    echo -e "${YELLOW}${BOLD}IMPORTANT - Save Redis Password:${NC}"
+    echo -e "${YELLOW}${BOLD}Redis Password:${NC}"
     echo -e "${BOLD}Password:${NC} ${RED}$password${NC}"
     echo ""
-    echo -e "${DIM}This password will not be displayed again!${NC}"
-    echo -e "${DIM}Save it to a secure location now.${NC}"
+    echo -e "${GREEN}${BOLD}✓ Credentials saved to:${NC} ${CYAN}$cred_file${NC}"
     echo ""
     echo -e "${BOLD}Connection Examples:${NC}"
     echo -e "${DIM}# CLI:${NC}"
@@ -276,6 +306,39 @@ EOF
         return 1
     fi
 
+    # Save credentials to file
+    local cred_file="/root/redis-cluster-credentials.txt"
+    cat > "$cred_file" << EOF
+Redis Cluster Credentials
+==========================
+Generated: $(date)
+
+Mode:      Cluster (3 masters + 3 replicas)
+Base Port: $base_port
+Nodes:     ${cluster_ports[@]}
+Password:  $password
+
+Connection strings:
+# CLI (connect to any node)
+redis-cli -c -p $base_port -a '$password'
+
+# Node.js
+new Redis.Cluster([
+EOF
+    for port in "${cluster_ports[@]}"; do
+        echo "  { host: 'localhost', port: $port }," >> "$cred_file"
+    done
+    cat >> "$cred_file" << EOF
+], { redisOptions: { password: '$password' } })
+
+Cluster commands:
+redis-cli -c -p $base_port -a 'PASSWORD' cluster info
+redis-cli -c -p $base_port -a 'PASSWORD' cluster nodes
+redis-cli -c -p $base_port -a 'PASSWORD' cluster slots
+
+EOF
+    chmod 600 "$cred_file"
+
     # Display summary
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
@@ -288,8 +351,10 @@ EOF
         echo -e "  - localhost:$port"
     done
     echo ""
-    echo -e "${YELLOW}${BOLD}IMPORTANT - Save Redis Password:${NC}"
+    echo -e "${YELLOW}${BOLD}Redis Cluster Password:${NC}"
     echo -e "${BOLD}Password:${NC} ${RED}$password${NC}"
+    echo ""
+    echo -e "${GREEN}${BOLD}✓ Credentials saved to:${NC} ${CYAN}$cred_file${NC}"
     echo ""
     echo -e "${BOLD}Connection Examples:${NC}"
     echo -e "${DIM}# CLI (connect to any node):${NC}"
