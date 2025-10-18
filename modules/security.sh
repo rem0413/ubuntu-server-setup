@@ -498,15 +498,15 @@ EOF
     return 0
 }
 
-# Setup UFW Service-Based Whitelist
+# Setup UFW IP Whitelist (Full VPS Access)
 setup_ufw_whitelist() {
-    log_step "UFW Service-Based Whitelist Configuration"
+    log_step "UFW IP Whitelist Configuration"
 
     echo ""
     echo -e "${YELLOW}${BOLD}⚠ WARNING - POTENTIAL LOCKOUT RISK ⚠${NC}"
     echo -e "${RED}This feature will:${NC}"
     echo -e "  1. Change UFW default policy to DENY all incoming"
-    echo -e "  2. Only allow specific IPs to access specific services"
+    echo -e "  2. Only allow whitelisted IPs to access this VPS"
     echo -e "  3. ${BOLD}You could lose SSH access if not configured properly${NC}"
     echo ""
     echo -e "${GREEN}Safety recommendations:${NC}"
@@ -520,70 +520,6 @@ setup_ufw_whitelist() {
         return 0
     fi
 
-    # Detect installed services and their ports
-    log_info "Detecting installed services..."
-    echo ""
-
-    local services=()
-    local service_count=0
-
-    # SSH
-    local ssh_port=$(grep -E "^Port\s+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    if [[ -z "$ssh_port" ]]; then
-        ssh_port="22"
-    fi
-    service_count=$((service_count + 1))
-    services+=("$service_count:SSH:$ssh_port")
-
-    # MongoDB
-    if command_exists mongod; then
-        service_count=$((service_count + 1))
-        services+=("$service_count:MongoDB:27017")
-    fi
-
-    # PostgreSQL
-    if command_exists psql; then
-        local pg_version=$(dpkg -l | grep postgresql | grep -oP 'postgresql-\\K[0-9]+' | head -1)
-        local pg_config="/etc/postgresql/$pg_version/main/postgresql.conf"
-        local pg_port="5432"
-        if [[ -f "$pg_config" ]]; then
-            pg_port=$(grep -E "^port\s*=" "$pg_config" 2>/dev/null | awk '{print $3}' || echo "5432")
-        fi
-        service_count=$((service_count + 1))
-        services+=("$service_count:PostgreSQL:$pg_port")
-    fi
-
-    # Redis
-    if command_exists redis-server; then
-        local redis_port="6379"
-        if [[ -f /etc/redis/redis.conf ]]; then
-            redis_port=$(grep "^port " /etc/redis/redis.conf 2>/dev/null | awk '{print $2}' || echo "6379")
-        fi
-        service_count=$((service_count + 1))
-        services+=("$service_count:Redis:$redis_port")
-    fi
-
-    # Nginx
-    if command_exists nginx; then
-        service_count=$((service_count + 1))
-        services+=("$service_count:Nginx-HTTP:80")
-        service_count=$((service_count + 1))
-        services+=("$service_count:Nginx-HTTPS:443")
-    fi
-
-    # Show detected services
-    echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo -e "${BOLD}Detected Services:${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    for svc in "${services[@]}"; do
-        local num=$(echo "$svc" | cut -d: -f1)
-        local name=$(echo "$svc" | cut -d: -f2)
-        local port=$(echo "$svc" | cut -d: -f3)
-        echo -e "  ${BOLD}$num.${NC} $name (port $port)"
-    done
-    echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo ""
-
     # Detect current SSH IP
     local current_ip=""
     if [[ -n "$SSH_CONNECTION" ]]; then
@@ -596,14 +532,14 @@ setup_ufw_whitelist() {
     local whitelist_entries=()
 
     echo -e "${BOLD}Add IP/Network to whitelist${NC}"
-    echo -e "${DIM}Each whitelisted IP will have access to ALL detected services${NC}"
+    echo -e "${DIM}Whitelisted IPs will have FULL access to this VPS (all ports)${NC}"
     echo ""
 
     # Auto-add current IP if detected
     if [[ -n "$current_ip" ]]; then
         if ask_yes_no "Auto-add current IP ($current_ip) to whitelist?" "y"; then
             whitelist_entries+=("$current_ip:Current SSH")
-            log_success "Added: $current_ip → All services (Current SSH)"
+            log_success "Added: $current_ip (Current SSH)"
             echo ""
         fi
     fi
@@ -632,7 +568,7 @@ setup_ufw_whitelist() {
 
         # Add entry
         whitelist_entries+=("$ip:$comment")
-        log_success "Added: $ip → All services ($comment)"
+        log_success "Added: $ip ($comment)"
         echo ""
     done
 
@@ -647,25 +583,17 @@ setup_ufw_whitelist() {
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}Whitelist Summary:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo ""
-    echo -e "${BOLD}Whitelisted IPs (will have access to ALL services):${NC}"
+    echo -e "${BOLD}Whitelisted IPs (full VPS access):${NC}"
     for entry in "${whitelist_entries[@]}"; do
         local entry_ip=$(echo "$entry" | cut -d: -f1)
         local entry_comment=$(echo "$entry" | cut -d: -f2)
         echo -e "  ${GREEN}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment)"
     done
-    echo ""
-    echo -e "${BOLD}Services accessible to whitelisted IPs:${NC}"
-    for svc in "${services[@]}"; do
-        local svc_name=$(echo "$svc" | cut -d: -f2)
-        local svc_port=$(echo "$svc" | cut -d: -f3)
-        echo -e "  ${CYAN}→${NC} $svc_name (port $svc_port)"
-    done
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${RED}${BOLD}FINAL WARNING:${NC}"
-    echo -e "  • Default policy will be: ${RED}DENY all incoming${NC}"
-    echo -e "  • Only whitelisted IPs can access the server"
+    echo -e "  • Default policy: ${RED}DENY all incoming${NC}"
+    echo -e "  • Only whitelisted IPs can access this VPS"
     echo -e "  • ${BOLD}Keep this session open for testing!${NC}"
     echo ""
 
@@ -682,13 +610,9 @@ setup_ufw_whitelist() {
         local entry_ip=$(echo "$entry" | cut -d: -f1)
         local entry_comment=$(echo "$entry" | cut -d: -f2)
 
-        # Allow all services for this IP
-        for svc in "${services[@]}"; do
-            local svc_name=$(echo "$svc" | cut -d: -f2)
-            local svc_port=$(echo "$svc" | cut -d: -f3)
-            log_info "Allowing $entry_ip → $svc_name:$svc_port"
-            ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
-        done
+        # Allow full access from this IP (all ports)
+        log_info "Allowing full access from: $entry_ip"
+        ufw allow from "$entry_ip" comment "Whitelist: $entry_comment" >> "$LOG_FILE" 2>&1
     done
 
     # Change default policy to deny
@@ -700,14 +624,14 @@ setup_ufw_whitelist() {
     # Reload UFW
     ufw reload >> "$LOG_FILE" 2>&1
 
-    log_success "UFW service-based whitelist configured successfully"
+    log_success "UFW whitelist configured successfully"
 
     # Show final status
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}UFW Status:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    ufw status numbered | head -30
+    ufw status numbered | head -20
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${YELLOW}${BOLD}IMPORTANT - TEST YOUR ACCESS NOW:${NC}"
@@ -723,7 +647,7 @@ setup_ufw_whitelist() {
     echo -e "${BOLD}Management Commands:${NC}"
     echo -e "  Status:      ${CYAN}sudo ufw status numbered${NC}"
     echo -e "  Delete rule: ${CYAN}sudo ufw delete <number>${NC}"
-    echo -e "  Add rule:    ${CYAN}sudo ufw allow from <IP> to any port <PORT>${NC}"
+    echo -e "  Add IP:      ${CYAN}sudo ufw allow from <IP>${NC}"
     echo -e "  Disable:     ${CYAN}sudo ufw disable${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
