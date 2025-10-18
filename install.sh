@@ -38,6 +38,7 @@ DRY_RUN=false
 SELECTED_COMPONENTS=()
 PROFILE=""
 SUMMARY_FILE="/root/ubuntu-setup-summary.txt"
+NON_INTERACTIVE=false  # Track if running with command-line args
 
 ################################################################################
 # Main Functions
@@ -49,6 +50,7 @@ parse_arguments() {
         case $1 in
             --all)
                 INSTALL_ALL=true
+                NON_INTERACTIVE=true
                 shift
                 ;;
             --dry-run)
@@ -57,10 +59,12 @@ parse_arguments() {
                 ;;
             --profile)
                 PROFILE="$2"
+                NON_INTERACTIVE=true
                 shift 2
                 ;;
             --components)
                 # Accept space-separated component numbers
+                NON_INTERACTIVE=true
                 shift
                 SELECTED_COMPONENTS=()
                 while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
@@ -471,38 +475,66 @@ show_final_summary() {
 ################################################################################
 
 main() {
-    # Parse arguments
+    # Parse arguments (only once at startup)
     parse_arguments "$@"
 
-    # Show banner
-    show_banner
+    # Main loop - allows returning to menu
+    while true; do
+        # Show banner
+        show_banner
 
-    # Initialize logging
-    init_logging
+        # Initialize logging (only once)
+        if [[ ! -f "$LOG_FILE" ]]; then
+            init_logging
+        fi
 
-    # System checks
-    perform_system_checks
+        # System checks
+        perform_system_checks
 
-    # Get user selections
-    get_user_selections
+        # Get user selections
+        get_user_selections
 
-    # Confirm selections
-    if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
-        log_error "No components selected"
-        exit 1
-    fi
+        # Confirm selections
+        if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
+            log_error "No components selected"
+            exit 1
+        fi
 
-    confirm_selections
+        confirm_selections
 
-    # Install components
-    echo ""
-    log_info "Starting installation..."
-    echo ""
+        # Install components
+        echo ""
+        log_info "Starting installation..."
+        echo ""
 
-    install_components
+        install_components
 
-    # Show summary
-    show_final_summary
+        # Show summary
+        show_final_summary
+
+        # Ask if user wants to return to menu (only in interactive mode)
+        echo ""
+        echo "========================================="
+        log_info "Installation complete!"
+        echo "========================================="
+        echo ""
+
+        # If non-interactive (command-line args), exit after first run
+        if [[ "$NON_INTERACTIVE" == true ]]; then
+            log_info "Exiting... Thank you for using Ubuntu Server Setup!"
+            break
+        fi
+
+        # Interactive mode - ask to return to menu
+        if ask_yes_no "Return to main menu?" "y"; then
+            # Clear selections for next iteration
+            SELECTED_COMPONENTS=()
+            continue
+        else
+            log_info "Exiting... Thank you for using Ubuntu Server Setup!"
+            break
+        fi
+    done
 }
 
 # Run main function
