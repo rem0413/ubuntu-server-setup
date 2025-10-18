@@ -56,6 +56,7 @@ configure_ssh_hardening() {
             fi
 
             apply_ssh_quick_hardening "$current_user"
+            return 0
             ;;
         2)
             create_ssh_user_interactive
@@ -74,6 +75,7 @@ configure_ssh_hardening() {
             ;;
         4)
             change_ssh_port
+            return 0
             ;;
         5)
             setup_sftp_user
@@ -88,77 +90,6 @@ configure_ssh_hardening() {
             return 0
             ;;
     esac
-
-    # Test SSH configuration
-    log_info "Testing SSH configuration..."
-    local test_output=$(sshd -t 2>&1)
-    local test_result=$?
-
-    if [[ $test_result -eq 0 ]]; then
-        log_success "SSH configuration is valid"
-
-        echo ""
-        log_warning "About to restart SSH service"
-        log_warning "Make sure you have:"
-        log_info "  - SSH keys configured (if password auth disabled)"
-        log_info "  - Another terminal session open"
-        log_info "  - Physical/console access if needed"
-        echo ""
-
-        if ask_yes_no "Restart SSH service?" "n"; then
-            systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
-
-            # Wait for service to start
-            sleep 2
-
-            if systemctl is-active --quiet "$ssh_service"; then
-                log_success "SSH service restarted successfully"
-                log_warning "Test your SSH connection NOW in a new terminal!"
-                return 0
-            else
-                log_error "SSH service failed to start"
-                log_info "Service status:"
-                systemctl status "$ssh_service" --no-pager --lines=20
-                log_info "Recent logs:"
-                journalctl -u "$ssh_service" -n 30 --no-pager
-                log_info "Configuration test:"
-                sshd -t 2>&1
-
-                log_info "Restoring backup..."
-                # Backup is stored in /var/backups/ubuntu-setup/ by backup_config function
-                local backup_dir="/var/backups/ubuntu-setup"
-                local backup_file=$(ls -t "$backup_dir/sshd_config."*.bak 2>/dev/null | head -1)
-
-                if [[ -n "$backup_file" ]] && [[ -f "$backup_file" ]]; then
-                    cp "$backup_file" "$sshd_config"
-                    log_info "Restored from: $backup_file"
-                    systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
-                    if systemctl is-active --quiet "$ssh_service"; then
-                        log_success "SSH service restored successfully"
-                    else
-                        log_error "Failed to restore SSH service"
-                        log_info "Check config manually: /etc/ssh/sshd_config"
-                    fi
-                else
-                    log_error "No backup file found in $backup_dir"
-                    log_warning "SSH config may be in invalid state"
-                    log_info "Backup directory contents:"
-                    ls -lah "$backup_dir" 2>/dev/null || echo "  Directory not found"
-                fi
-                return 1
-            fi
-        else
-            log_info "SSH not restarted. Apply manually: sudo systemctl restart $ssh_service"
-        fi
-    else
-        log_error "SSH configuration test failed"
-        log_info "Configuration errors:"
-        echo "$test_output"
-        log_info "Please fix the errors above and try again"
-        return 1
-    fi
-
-    return 0
 }
 
 create_ssh_user_interactive() {
