@@ -431,11 +431,34 @@ EOF
 
     # Restart Fail2ban
     systemctl restart fail2ban >> "$LOG_FILE" 2>&1
-    log_success "Fail2ban restarted with new configuration"
 
-    # Show Fail2ban status
-    log_info "Fail2ban status:"
-    fail2ban-client status sshd 2>/dev/null || log_warning "Could not get Fail2ban status"
+    # Wait for service to start
+    sleep 2
+
+    if systemctl is-active --quiet fail2ban; then
+        log_success "Fail2ban restarted with new configuration"
+
+        # Show Fail2ban status
+        echo ""
+        log_info "Fail2ban status:"
+
+        # Check which jails are enabled
+        local jails=$(fail2ban-client status 2>/dev/null | grep "Jail list" | sed 's/.*:\s*//')
+
+        if [[ -n "$jails" ]]; then
+            echo "  Active jails: $jails"
+
+            # Show detailed status for sshd jail if it exists
+            if echo "$jails" | grep -q "sshd"; then
+                echo ""
+                fail2ban-client status sshd 2>/dev/null | sed 's/^/  /'
+            fi
+        else
+            log_warning "No active jails found. Check configuration in /etc/fail2ban/jail.local"
+        fi
+    else
+        log_error "Fail2ban failed to start. Check logs: journalctl -u fail2ban -n 20"
+    fi
 
     return 0
 }
