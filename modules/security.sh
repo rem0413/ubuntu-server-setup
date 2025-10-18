@@ -595,15 +595,15 @@ setup_ufw_whitelist() {
     # Collect whitelist entries
     local whitelist_entries=()
 
-    echo -e "${BOLD}Add IP/Network whitelist entries${NC}"
-    echo -e "${DIM}For each IP/network, specify which services it can access${NC}"
+    echo -e "${BOLD}Add IP/Network to whitelist${NC}"
+    echo -e "${DIM}Each whitelisted IP will have access to ALL detected services${NC}"
     echo ""
 
-    # Auto-add current IP for SSH if detected
+    # Auto-add current IP if detected
     if [[ -n "$current_ip" ]]; then
-        if ask_yes_no "Auto-add current IP ($current_ip) for SSH access?" "y"; then
-            whitelist_entries+=("$current_ip:1:Current SSH")
-            log_success "Added: $current_ip → SSH (Current SSH)"
+        if ask_yes_no "Auto-add current IP ($current_ip) to whitelist?" "y"; then
+            whitelist_entries+=("$current_ip:Current SSH")
+            log_success "Added: $current_ip → All services (Current SSH)"
             echo ""
         fi
     fi
@@ -623,19 +623,6 @@ setup_ufw_whitelist() {
             continue
         fi
 
-        # Ask which services
-        echo ""
-        echo -e "${DIM}Which services can $ip access?${NC}"
-        echo -e "${DIM}Enter service numbers (space-separated, e.g., \"1 2 3\") or \"all\":${NC}"
-
-        local service_choice=""
-        read_prompt "Services: " service_choice ""
-
-        if [[ -z "$service_choice" ]]; then
-            log_warning "No services selected, skipping"
-            continue
-        fi
-
         # Optional comment/label
         local comment=""
         read_prompt "Comment/Label [Optional]: " comment ""
@@ -644,25 +631,8 @@ setup_ufw_whitelist() {
         fi
 
         # Add entry
-        whitelist_entries+=("$ip:$service_choice:$comment")
-
-        # Show what was added
-        if [[ "$service_choice" == "all" ]]; then
-            log_success "Added: $ip → All services ($comment)"
-        else
-            local service_names=""
-            for num in $service_choice; do
-                for svc in "${services[@]}"; do
-                    local svc_num=$(echo "$svc" | cut -d: -f1)
-                    local svc_name=$(echo "$svc" | cut -d: -f2)
-                    if [[ "$svc_num" == "$num" ]]; then
-                        service_names+="$svc_name, "
-                    fi
-                done
-            done
-            service_names=${service_names%, }
-            log_success "Added: $ip → $service_names ($comment)"
-        fi
+        whitelist_entries+=("$ip:$comment")
+        log_success "Added: $ip → All services ($comment)"
         echo ""
     done
 
@@ -677,33 +647,25 @@ setup_ufw_whitelist() {
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}Whitelist Summary:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${BOLD}Whitelisted IPs (will have access to ALL services):${NC}"
     for entry in "${whitelist_entries[@]}"; do
         local entry_ip=$(echo "$entry" | cut -d: -f1)
-        local entry_services=$(echo "$entry" | cut -d: -f2)
-        local entry_comment=$(echo "$entry" | cut -d: -f3)
-
+        local entry_comment=$(echo "$entry" | cut -d: -f2)
         echo -e "  ${GREEN}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment)"
-
-        if [[ "$entry_services" == "all" ]]; then
-            echo -e "    → All services"
-        else
-            for num in $entry_services; do
-                for svc in "${services[@]}"; do
-                    local svc_num=$(echo "$svc" | cut -d: -f1)
-                    local svc_name=$(echo "$svc" | cut -d: -f2)
-                    local svc_port=$(echo "$svc" | cut -d: -f3)
-                    if [[ "$svc_num" == "$num" ]]; then
-                        echo -e "    → $svc_name (port $svc_port)"
-                    fi
-                done
-            done
-        fi
+    done
+    echo ""
+    echo -e "${BOLD}Services accessible to whitelisted IPs:${NC}"
+    for svc in "${services[@]}"; do
+        local svc_name=$(echo "$svc" | cut -d: -f2)
+        local svc_port=$(echo "$svc" | cut -d: -f3)
+        echo -e "  ${CYAN}→${NC} $svc_name (port $svc_port)"
     done
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${RED}${BOLD}FINAL WARNING:${NC}"
     echo -e "  • Default policy will be: ${RED}DENY all incoming${NC}"
-    echo -e "  • Only listed IPs can access specified services"
+    echo -e "  • Only whitelisted IPs can access the server"
     echo -e "  • ${BOLD}Keep this session open for testing!${NC}"
     echo ""
 
@@ -718,31 +680,15 @@ setup_ufw_whitelist() {
 
     for entry in "${whitelist_entries[@]}"; do
         local entry_ip=$(echo "$entry" | cut -d: -f1)
-        local entry_services=$(echo "$entry" | cut -d: -f2)
-        local entry_comment=$(echo "$entry" | cut -d: -f3)
+        local entry_comment=$(echo "$entry" | cut -d: -f2)
 
-        if [[ "$entry_services" == "all" ]]; then
-            # Allow all services
-            for svc in "${services[@]}"; do
-                local svc_name=$(echo "$svc" | cut -d: -f2)
-                local svc_port=$(echo "$svc" | cut -d: -f3)
-                log_info "Allowing $entry_ip → $svc_name:$svc_port"
-                ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
-            done
-        else
-            # Allow specific services
-            for num in $entry_services; do
-                for svc in "${services[@]}"; do
-                    local svc_num=$(echo "$svc" | cut -d: -f1)
-                    local svc_name=$(echo "$svc" | cut -d: -f2)
-                    local svc_port=$(echo "$svc" | cut -d: -f3)
-                    if [[ "$svc_num" == "$num" ]]; then
-                        log_info "Allowing $entry_ip → $svc_name:$svc_port"
-                        ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
-                    fi
-                done
-            done
-        fi
+        # Allow all services for this IP
+        for svc in "${services[@]}"; do
+            local svc_name=$(echo "$svc" | cut -d: -f2)
+            local svc_port=$(echo "$svc" | cut -d: -f3)
+            log_info "Allowing $entry_ip → $svc_name:$svc_port"
+            ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
+        done
     done
 
     # Change default policy to deny
