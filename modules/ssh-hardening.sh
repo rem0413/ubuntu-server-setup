@@ -465,7 +465,96 @@ apply_ssh_quick_hardening() {
     update_ssh_config "GatewayPorts" "no"
     log_success "Unused features disabled"
 
-    log_success "SSH hardening complete"
+    # Test SSH configuration before restarting
+    log_info "Testing SSH configuration..."
+    local test_output=$(sshd -t 2>&1)
+
+    if [[ $? -eq 0 ]]; then
+        log_success "SSH configuration is valid"
+
+        echo ""
+        log_warning "⚠ IMPORTANT: About to restart SSH service"
+        log_warning "Current SSH sessions will NOT be disconnected"
+        log_warning "But make sure you:"
+        echo ""
+        log_info "  ✓ Have SSH keys configured (password auth will be disabled)"
+        if [[ -n "$new_port" ]] && [[ "$new_port" != "22" ]]; then
+            log_info "  ✓ Firewall allows port $new_port (already configured)"
+            log_info "  ✓ Will reconnect using: ssh -p $new_port user@server"
+        fi
+        log_info "  ✓ Have physical/console access if something goes wrong"
+        echo ""
+
+        # Get SSH service name
+        local ssh_service="ssh"
+        if systemctl list-unit-files | grep -q "^sshd.service"; then
+            ssh_service="sshd"
+        fi
+
+        if ask_yes_no "Apply changes and restart SSH service?" "y"; then
+            # Backup config before restart
+            backup_config "/etc/ssh/sshd_config"
+
+            systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
+
+            # Wait for service to start
+            sleep 2
+
+            if systemctl is-active --quiet "$ssh_service"; then
+                log_success "SSH service restarted successfully"
+                log_success "SSH hardening complete"
+
+                echo ""
+                log_warning "🔐 NEXT STEPS:"
+                if [[ -n "$new_port" ]] && [[ "$new_port" != "22" ]]; then
+                    log_info "  1. Test new connection: ssh -p $new_port user@server"
+                else
+                    log_info "  1. Test new connection in another terminal"
+                fi
+                log_info "  2. Verify you can login before closing this session"
+                log_info "  3. Keep this terminal open until confirmed working"
+                echo ""
+            else
+                log_error "SSH service failed to start!"
+                log_info "Checking service status..."
+                systemctl status "$ssh_service" --no-pager --lines=15
+
+                log_info "Restoring previous configuration..."
+                local backup_dir="/var/backups/ubuntu-setup"
+                local backup_file=$(ls -t "$backup_dir/sshd_config."*.bak 2>/dev/null | head -1)
+
+                if [[ -n "$backup_file" ]] && [[ -f "$backup_file" ]]; then
+                    cp "$backup_file" "/etc/ssh/sshd_config"
+                    log_info "Restored from: $backup_file"
+                    systemctl restart "$ssh_service" >> /var/log/ubuntu-setup.log 2>&1
+
+                    sleep 2
+                    if systemctl is-active --quiet "$ssh_service"; then
+                        log_success "SSH service restored to previous configuration"
+                        log_warning "SSH hardening was rolled back due to errors"
+                    else
+                        log_error "Failed to restore SSH service"
+                        log_error "Manual intervention required!"
+                        log_info "Check: journalctl -u $ssh_service -n 50"
+                    fi
+                else
+                    log_error "No backup found. SSH may be in invalid state!"
+                    log_info "Manual fix required: /etc/ssh/sshd_config"
+                fi
+                return 1
+            fi
+        else
+            log_warning "SSH service NOT restarted"
+            log_info "Changes saved to /etc/ssh/sshd_config but not applied"
+            log_info "To apply manually: sudo systemctl restart $ssh_service"
+        fi
+    else
+        log_error "SSH configuration test failed!"
+        log_info "Errors:"
+        echo "$test_output"
+        log_error "SSH hardening aborted - no changes applied"
+        return 1
+    fi
 }
 
 update_ssh_config() {
