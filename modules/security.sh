@@ -498,15 +498,15 @@ EOF
     return 0
 }
 
-# Setup UFW IP Whitelist with default deny
+# Setup UFW Service-Based Whitelist
 setup_ufw_whitelist() {
-    log_step "UFW IP Whitelist Configuration"
+    log_step "UFW Service-Based Whitelist Configuration"
 
     echo ""
     echo -e "${YELLOW}${BOLD}⚠ WARNING - POTENTIAL LOCKOUT RISK ⚠${NC}"
     echo -e "${RED}This feature will:${NC}"
     echo -e "  1. Change UFW default policy to DENY all incoming"
-    echo -e "  2. Only allow connections from whitelisted IPs"
+    echo -e "  2. Only allow specific IPs to access specific services"
     echo -e "  3. ${BOLD}You could lose SSH access if not configured properly${NC}"
     echo ""
     echo -e "${GREEN}Safety recommendations:${NC}"
@@ -520,100 +520,190 @@ setup_ufw_whitelist() {
         return 0
     fi
 
-    # Detect current connection IP
+    # Detect installed services and their ports
+    log_info "Detecting installed services..."
+    echo ""
+
+    local services=()
+    local service_count=0
+
+    # SSH
+    local ssh_port=$(grep -E "^Port\s+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    if [[ -z "$ssh_port" ]]; then
+        ssh_port="22"
+    fi
+    service_count=$((service_count + 1))
+    services+=("$service_count:SSH:$ssh_port")
+
+    # MongoDB
+    if command_exists mongod; then
+        service_count=$((service_count + 1))
+        services+=("$service_count:MongoDB:27017")
+    fi
+
+    # PostgreSQL
+    if command_exists psql; then
+        local pg_version=$(dpkg -l | grep postgresql | grep -oP 'postgresql-\\K[0-9]+' | head -1)
+        local pg_config="/etc/postgresql/$pg_version/main/postgresql.conf"
+        local pg_port="5432"
+        if [[ -f "$pg_config" ]]; then
+            pg_port=$(grep -E "^port\s*=" "$pg_config" 2>/dev/null | awk '{print $3}' || echo "5432")
+        fi
+        service_count=$((service_count + 1))
+        services+=("$service_count:PostgreSQL:$pg_port")
+    fi
+
+    # Redis
+    if command_exists redis-server; then
+        local redis_port="6379"
+        if [[ -f /etc/redis/redis.conf ]]; then
+            redis_port=$(grep "^port " /etc/redis/redis.conf 2>/dev/null | awk '{print $2}' || echo "6379")
+        fi
+        service_count=$((service_count + 1))
+        services+=("$service_count:Redis:$redis_port")
+    fi
+
+    # Nginx
+    if command_exists nginx; then
+        service_count=$((service_count + 1))
+        services+=("$service_count:Nginx-HTTP:80")
+        service_count=$((service_count + 1))
+        services+=("$service_count:Nginx-HTTPS:443")
+    fi
+
+    # Show detected services
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo -e "${BOLD}Detected Services:${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    for svc in "${services[@]}"; do
+        local num=$(echo "$svc" | cut -d: -f1)
+        local name=$(echo "$svc" | cut -d: -f2)
+        local port=$(echo "$svc" | cut -d: -f3)
+        echo -e "  ${BOLD}$num.${NC} $name (port $port)"
+    done
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
+
+    # Detect current SSH IP
     local current_ip=""
     if [[ -n "$SSH_CONNECTION" ]]; then
         current_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}')
-        log_info "Detected current SSH connection from: $current_ip"
+        log_info "Current SSH connection from: $current_ip"
+        echo ""
     fi
 
-    # Detect private networks
-    log_info "Detecting private networks..."
-    local private_networks=()
+    # Collect whitelist entries
+    local whitelist_entries=()
 
-    # Get all IPv4 addresses and their networks
-    while IFS= read -r line; do
-        if [[ "$line" =~ inet[[:space:]]([0-9.]+)/([0-9]+) ]]; then
-            local ip="${BASH_REMATCH[1]}"
-            local cidr="${BASH_REMATCH[2]}"
-            local network="${ip}/${cidr}"
+    echo -e "${BOLD}Add IP/Network whitelist entries${NC}"
+    echo -e "${DIM}For each IP/network, specify which services it can access${NC}"
+    echo ""
 
-            # Check if it's a private network
-            if [[ "$ip" =~ ^10\. ]] || \
-               [[ "$ip" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || \
-               [[ "$ip" =~ ^192\.168\. ]]; then
-                private_networks+=("$network")
-                log_info "  Found private network: $network"
-            fi
-        fi
-    done < <(ip -4 addr show 2>/dev/null | grep "inet ")
-
-    # Collect IPs/networks to whitelist
-    local whitelist=()
-
-    # Add current IP if detected
+    # Auto-add current IP for SSH if detected
     if [[ -n "$current_ip" ]]; then
-        echo ""
-        if ask_yes_no "Add current SSH IP ($current_ip) to whitelist?" "y"; then
-            whitelist+=("$current_ip")
+        if ask_yes_no "Auto-add current IP ($current_ip) for SSH access?" "y"; then
+            whitelist_entries+=("$current_ip:1:Current SSH")
+            log_success "Added: $current_ip → SSH (Current SSH)"
+            echo ""
         fi
     fi
 
-    # Add private networks
-    if [[ ${#private_networks[@]} -gt 0 ]]; then
-        echo ""
-        echo -e "${BOLD}Detected private networks:${NC}"
-        for net in "${private_networks[@]}"; do
-            echo "  - $net"
-        done
-        echo ""
-        if ask_yes_no "Add all private networks to whitelist?" "y"; then
-            whitelist+=("${private_networks[@]}")
-        fi
-    fi
-
-    # Allow adding custom IPs/networks
-    echo ""
-    echo -e "${BOLD}Add custom IPs or networks to whitelist${NC}"
-    echo -e "${DIM}(Enter IP address or CIDR notation, e.g., 203.0.113.5 or 203.0.113.0/24)${NC}"
-    echo -e "${DIM}(Press Enter with empty input to finish)${NC}"
-    echo ""
-
+    # Manual entry loop
     while true; do
-        local custom_ip=""
-        read_prompt "IP/Network to whitelist (or Enter to finish): " custom_ip ""
+        local ip=""
+        read_prompt "IP/Network (CIDR format, or Enter to finish): " ip ""
 
-        if [[ -z "$custom_ip" ]]; then
+        if [[ -z "$ip" ]]; then
             break
         fi
 
         # Validate IP/CIDR format
-        if [[ "$custom_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
-            whitelist+=("$custom_ip")
-            log_success "Added: $custom_ip"
-        else
-            log_error "Invalid format. Use: 203.0.113.5 or 203.0.113.0/24"
+        if ! [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+            log_error "Invalid format. Use: 192.168.1.100 or 192.168.1.0/24"
+            continue
         fi
+
+        # Ask which services
+        echo ""
+        echo -e "${DIM}Which services can $ip access?${NC}"
+        echo -e "${DIM}Enter service numbers (space-separated, e.g., \"1 2 3\") or \"all\":${NC}"
+
+        local service_choice=""
+        read_prompt "Services: " service_choice ""
+
+        if [[ -z "$service_choice" ]]; then
+            log_warning "No services selected, skipping"
+            continue
+        fi
+
+        # Optional comment/label
+        local comment=""
+        read_prompt "Comment/Label [Optional]: " comment ""
+        if [[ -z "$comment" ]]; then
+            comment="Custom"
+        fi
+
+        # Add entry
+        whitelist_entries+=("$ip:$service_choice:$comment")
+
+        # Show what was added
+        if [[ "$service_choice" == "all" ]]; then
+            log_success "Added: $ip → All services ($comment)"
+        else
+            local service_names=""
+            for num in $service_choice; do
+                for svc in "${services[@]}"; do
+                    local svc_num=$(echo "$svc" | cut -d: -f1)
+                    local svc_name=$(echo "$svc" | cut -d: -f2)
+                    if [[ "$svc_num" == "$num" ]]; then
+                        service_names+="$svc_name, "
+                    fi
+                done
+            done
+            service_names=${service_names%, }
+            log_success "Added: $ip → $service_names ($comment)"
+        fi
+        echo ""
     done
 
-    # Show summary
-    if [[ ${#whitelist[@]} -eq 0 ]]; then
-        log_error "No IPs/networks added to whitelist. Cancelling for safety."
+    # Check if we have entries
+    if [[ ${#whitelist_entries[@]} -eq 0 ]]; then
+        log_error "No whitelist entries added. Cancelling for safety."
         return 1
     fi
 
+    # Show summary
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}Whitelist Summary:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    for item in "${whitelist[@]}"; do
-        echo -e "  ${GREEN}✓${NC} $item"
+    for entry in "${whitelist_entries[@]}"; do
+        local entry_ip=$(echo "$entry" | cut -d: -f1)
+        local entry_services=$(echo "$entry" | cut -d: -f2)
+        local entry_comment=$(echo "$entry" | cut -d: -f3)
+
+        echo -e "  ${GREEN}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment)"
+
+        if [[ "$entry_services" == "all" ]]; then
+            echo -e "    → All services"
+        else
+            for num in $entry_services; do
+                for svc in "${services[@]}"; do
+                    local svc_num=$(echo "$svc" | cut -d: -f1)
+                    local svc_name=$(echo "$svc" | cut -d: -f2)
+                    local svc_port=$(echo "$svc" | cut -d: -f3)
+                    if [[ "$svc_num" == "$num" ]]; then
+                        echo -e "    → $svc_name (port $svc_port)"
+                    fi
+                done
+            done
+        fi
     done
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${RED}${BOLD}FINAL WARNING:${NC}"
     echo -e "  • Default policy will be: ${RED}DENY all incoming${NC}"
-    echo -e "  • Only listed IPs will have access"
+    echo -e "  • Only listed IPs can access specified services"
     echo -e "  • ${BOLD}Keep this session open for testing!${NC}"
     echo ""
 
@@ -624,40 +714,54 @@ setup_ufw_whitelist() {
 
     # Apply UFW rules
     log_info "Applying UFW whitelist rules..."
+    echo ""
 
-    # First, allow from whitelisted IPs to SSH port
-    local ssh_port=$(grep -E "^Port\s+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    if [[ -z "$ssh_port" ]]; then
-        ssh_port="22"
-    fi
+    for entry in "${whitelist_entries[@]}"; do
+        local entry_ip=$(echo "$entry" | cut -d: -f1)
+        local entry_services=$(echo "$entry" | cut -d: -f2)
+        local entry_comment=$(echo "$entry" | cut -d: -f3)
 
-    for item in "${whitelist[@]}"; do
-        log_info "Allowing from $item..."
-        ufw allow from "$item" to any port "$ssh_port" comment "Whitelist: $item" >> "$LOG_FILE" 2>&1
-
-        # Also allow to other common services if they exist
-        if command_exists nginx; then
-            ufw allow from "$item" to any port 80 comment "HTTP: $item" >> "$LOG_FILE" 2>&1
-            ufw allow from "$item" to any port 443 comment "HTTPS: $item" >> "$LOG_FILE" 2>&1
+        if [[ "$entry_services" == "all" ]]; then
+            # Allow all services
+            for svc in "${services[@]}"; do
+                local svc_name=$(echo "$svc" | cut -d: -f2)
+                local svc_port=$(echo "$svc" | cut -d: -f3)
+                log_info "Allowing $entry_ip → $svc_name:$svc_port"
+                ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
+            done
+        else
+            # Allow specific services
+            for num in $entry_services; do
+                for svc in "${services[@]}"; do
+                    local svc_num=$(echo "$svc" | cut -d: -f1)
+                    local svc_name=$(echo "$svc" | cut -d: -f2)
+                    local svc_port=$(echo "$svc" | cut -d: -f3)
+                    if [[ "$svc_num" == "$num" ]]; then
+                        log_info "Allowing $entry_ip → $svc_name:$svc_port"
+                        ufw allow from "$entry_ip" to any port "$svc_port" comment "$svc_name: $entry_comment" >> "$LOG_FILE" 2>&1
+                    fi
+                done
+            done
         fi
     done
 
     # Change default policy to deny
-    log_info "Setting default policy to DENY..."
+    echo ""
+    log_info "Setting default policy to DENY incoming..."
     ufw default deny incoming >> "$LOG_FILE" 2>&1
     ufw default allow outgoing >> "$LOG_FILE" 2>&1
 
     # Reload UFW
     ufw reload >> "$LOG_FILE" 2>&1
 
-    log_success "UFW whitelist configured successfully"
+    log_success "UFW service-based whitelist configured successfully"
 
     # Show final status
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo -e "${BOLD}UFW Whitelist Status:${NC}"
+    echo -e "${BOLD}UFW Status:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    ufw status numbered | grep -E "ALLOW|DENY" | head -20
+    ufw status numbered | head -30
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${YELLOW}${BOLD}IMPORTANT - TEST YOUR ACCESS NOW:${NC}"
@@ -670,11 +774,11 @@ setup_ufw_whitelist() {
     echo -e "${DIM}  sudo ufw disable${NC}"
     echo -e "${DIM}  sudo ufw reset${NC}"
     echo ""
-    echo -e "${BOLD}Useful commands:${NC}"
-    echo -e "  Status:        ${CYAN}sudo ufw status numbered${NC}"
-    echo -e "  Delete rule:   ${CYAN}sudo ufw delete <number>${NC}"
-    echo -e "  Add IP:        ${CYAN}sudo ufw allow from <IP> to any port $ssh_port${NC}"
-    echo -e "  Disable:       ${CYAN}sudo ufw disable${NC}"
+    echo -e "${BOLD}Management Commands:${NC}"
+    echo -e "  Status:      ${CYAN}sudo ufw status numbered${NC}"
+    echo -e "  Delete rule: ${CYAN}sudo ufw delete <number>${NC}"
+    echo -e "  Add rule:    ${CYAN}sudo ufw allow from <IP> to any port <PORT>${NC}"
+    echo -e "  Disable:     ${CYAN}sudo ufw disable${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
 
