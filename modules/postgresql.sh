@@ -16,7 +16,8 @@ install_postgresql() {
     fi
 
     # Ask for custom port
-    local pg_port=$(get_input "PostgreSQL port" "5432")
+    local pg_port=""
+    read_prompt "PostgreSQL port [5432]: " pg_port "5432"
     if ! [[ "$pg_port" =~ ^[0-9]+$ ]] || [[ "$pg_port" -lt 1024 ]] || [[ "$pg_port" -gt 65535 ]]; then
         log_warning "Invalid port number. Using default 5432"
         pg_port="5432"
@@ -91,7 +92,8 @@ configure_postgresql_user() {
     local pg_port="$1"
     log_info "Configuring PostgreSQL user..."
 
-    local db_user=$(get_input "Database username" "postgres")
+    local db_user=""
+    read_prompt "Database username [postgres]: " db_user "postgres"
 
     # Generate random password
     local db_pass=$(generate_password 20)
@@ -117,7 +119,7 @@ configure_postgresql_user() {
             log_info "Using existing 'postgres' database"
         else
             if ask_yes_no "Create database for user?" "y"; then
-                db_name=$(get_input "Database name" "postgres")
+                read_prompt "Database name [postgres]: " db_name "postgres"
                 sudo -u postgres psql -p "$pg_port" -c "CREATE DATABASE $db_name OWNER $db_user;" >> "$LOG_FILE" 2>&1
 
                 if [[ $? -eq 0 ]]; then
