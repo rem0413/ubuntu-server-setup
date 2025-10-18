@@ -65,6 +65,77 @@ case "$1" in
         echo "Updated successfully!"
         ;;
 
+    status|s)
+        cd "$INSTALL_DIR"
+        if [ -f "$INSTALL_DIR/status.sh" ]; then
+            sudo "$INSTALL_DIR/status.sh"
+        else
+            echo "Error: status.sh not found"
+            exit 1
+        fi
+        ;;
+
+    check|health)
+        cd "$INSTALL_DIR"
+        echo "==========================================="
+        echo "  System Health Check"
+        echo "==========================================="
+        echo ""
+
+        # Quick health check
+        if [ -f "$INSTALL_DIR/status.sh" ]; then
+            sudo "$INSTALL_DIR/status.sh" | grep -E "✓|✗" || echo "No services installed"
+        fi
+
+        echo ""
+        echo "Disk Usage:"
+        df -h / | tail -1 | awk '{print "  Total: "$2"  Used: "$3" ("$5")  Free: "$4}'
+
+        echo ""
+        echo "Memory Usage:"
+        free -h | grep Mem | awk '{print "  Total: "$2"  Used: "$3"  Free: "$4"  Available: "$7}'
+
+        echo ""
+        echo "Load Average:"
+        uptime | awk -F'load average:' '{print "  "$2}'
+
+        if [ -f "/var/log/ubuntu-setup.log" ]; then
+            echo ""
+            echo "Recent Errors (last 5):"
+            sudo grep -i "ERROR" /var/log/ubuntu-setup.log | tail -5 || echo "  No errors found"
+        fi
+        ;;
+
+    info)
+        cd "$INSTALL_DIR"
+        echo "==========================================="
+        echo "  Ubuntu Setup Information"
+        echo "==========================================="
+        echo ""
+        echo "Installation:"
+        echo "  Location: $INSTALL_DIR"
+        echo "  Command: $(which ubuntu-setup)"
+        echo "  Version: $(cd "$INSTALL_DIR" && git describe --tags 2>/dev/null || echo 'v1.0.0')"
+        echo "  Branch: $(cd "$INSTALL_DIR" && git branch --show-current)"
+        echo "  Last Update: $(cd "$INSTALL_DIR" && git log -1 --format='%ar (%h)')"
+        echo ""
+
+        if [ -f "/root/ubuntu-setup-summary.txt" ]; then
+            echo "Installation Summary:"
+            echo "  File: /root/ubuntu-setup-summary.txt"
+            echo ""
+            sudo cat /root/ubuntu-setup-summary.txt
+        fi
+
+        if [ -f "/var/log/ubuntu-setup.log" ]; then
+            echo ""
+            echo "Log File:"
+            echo "  Location: /var/log/ubuntu-setup.log"
+            echo "  Size: $(du -h /var/log/ubuntu-setup.log | cut -f1)"
+            echo "  Lines: $(wc -l < /var/log/ubuntu-setup.log)"
+        fi
+        ;;
+
     version|v|--version|-v)
         if [ -f "$INSTALL_DIR/VERSION" ]; then
             cat "$INSTALL_DIR/VERSION"
@@ -88,6 +159,9 @@ case "$1" in
 
 Usage:
   ubuntu-setup install [options]     Install components
+  ubuntu-setup status                 Show all services status
+  ubuntu-setup check                  Quick health check
+  ubuntu-setup info                   Show installation info
   ubuntu-setup update                 Update from GitHub
   ubuntu-setup version                Show version
   ubuntu-setup uninstall              Remove ubuntu-setup
@@ -132,6 +206,15 @@ Examples:
   # Use profile
   ubuntu-setup install --profile nodejs-app
 
+  # Check system status
+  ubuntu-setup status
+
+  # Quick health check
+  ubuntu-setup check
+
+  # Show installation info
+  ubuntu-setup info
+
   # Update command itself
   ubuntu-setup update
 
@@ -139,7 +222,7 @@ HELP
         ;;
 
     *)
-        echo "Usage: ubuntu-setup {install|update|version|uninstall|help}"
+        echo "Usage: ubuntu-setup {install|status|check|info|update|version|uninstall|help}"
         echo "Try 'ubuntu-setup help' for more information"
         exit 1
         ;;
