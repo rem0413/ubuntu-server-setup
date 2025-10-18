@@ -10,9 +10,18 @@ install_pm2() {
         return 1
     fi
 
+    # Check if npm is installed
+    if ! command_exists npm; then
+        log_error "npm is required for PM2. Please install Node.js with npm first."
+        return 1
+    fi
+
+    log_info "Node.js version: $(node --version)"
+    log_info "npm version: $(npm --version)"
+
     # Check if already installed
     if command_exists pm2; then
-        local version=$(get_version pm2)
+        local version=$(pm2 --version 2>/dev/null || echo "unknown")
         log_info "PM2 $version already installed"
         if ask_yes_no "Reinstall PM2?" "n"; then
             log_info "Proceeding with reinstallation..."
@@ -23,20 +32,43 @@ install_pm2() {
     fi
 
     # Install PM2 globally
-    log_info "Installing PM2 globally..."
+    log_info "Installing PM2 globally via npm..."
     npm install -g pm2 >> "$LOG_FILE" 2>&1
 
     if [[ $? -ne 0 ]]; then
         log_error "Failed to install PM2"
+        log_info "Checking npm install error..."
+        tail -20 "$LOG_FILE"
         return 1
     fi
 
-    # Verify installation
-    if command_exists pm2; then
-        local version=$(get_version pm2)
+    # Refresh PATH to pick up newly installed pm2
+    export PATH="$PATH:/usr/local/bin:/usr/bin"
+    hash -r 2>/dev/null || true
+
+    # Wait a moment for installation to complete
+    sleep 2
+
+    # Verify installation with multiple methods
+    log_info "Verifying PM2 installation..."
+
+    # Method 1: Check if pm2 command exists
+    if command -v pm2 >/dev/null 2>&1; then
+        local version=$(pm2 --version 2>/dev/null || echo "unknown")
         log_success "PM2 $version installed successfully"
+    # Method 2: Check npm global packages
+    elif npm list -g pm2 2>/dev/null | grep -q pm2; then
+        log_success "PM2 installed via npm (found in global packages)"
+        # Try to get version from npm
+        local version=$(npm list -g pm2 2>/dev/null | grep pm2 | awk '{print $2}' | sed 's/@//')
+        log_info "PM2 version: $version"
     else
         log_error "PM2 installation verification failed"
+        log_info "Debugging information:"
+        log_info "PATH: $PATH"
+        log_info "which pm2: $(which pm2 2>&1 || echo 'not found')"
+        log_info "npm global packages:"
+        npm list -g --depth=0 2>&1 | grep -i pm2 || echo "PM2 not found in global packages"
         return 1
     fi
 
