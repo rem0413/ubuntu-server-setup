@@ -9,7 +9,12 @@ set -e
 
 INSTALL_DIR="/opt/ubuntu-setup"
 BIN_LINK="/usr/local/bin/ubuntu-setup"
-VERSION="2.0.0"
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load version from VERSION file
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "2.0.0")
 
 # Check root
 if [[ $EUID -ne 0 ]]; then

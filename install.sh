@@ -4,13 +4,15 @@
 # Ubuntu Server Setup Automation Script
 # Description: Interactive server setup for Ubuntu 24.04 LTS
 # Author: Ubuntu Setup Team
-# Version: 2.0.0
 ################################################################################
 
 set -e
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load version from VERSION file
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "2.0.0")
 
 # Load libraries
 source "$SCRIPT_DIR/lib/colors.sh"
@@ -32,7 +34,6 @@ source "$SCRIPT_DIR/modules/redis.sh"
 source "$SCRIPT_DIR/modules/monitoring.sh"
 
 # Global variables
-VERSION="2.0.0"
 INSTALL_ALL=false
 DRY_RUN=false
 SELECTED_COMPONENTS=()

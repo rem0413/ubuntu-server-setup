@@ -3,12 +3,14 @@
 ################################################################################
 # Ubuntu Server Setup - Test Script
 # Description: Run tests and validation checks
-# Version: 2.0.0
 # Usage: ./test.sh [--lint-only] [--verbose]
 ################################################################################
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load version from VERSION file
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "2.0.0")
 
 # Load libraries
 source "$SCRIPT_DIR/lib/colors.sh"
@@ -28,7 +30,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help|-h)
             cat << EOF
-Test Script v2.0.0
+Test Script v$VERSION
 
 Usage: $0 [OPTIONS]
 
@@ -233,10 +235,10 @@ echo -e "${BOLD}10. Version Information:${NC}"
 echo ""
 
 run_test "VERSION file exists" "test -f $SCRIPT_DIR/VERSION"
-run_test "VERSION is 2.0.0" "grep -q '2.0.0' $SCRIPT_DIR/VERSION"
+run_test "VERSION is 2.1.0" "grep -q '2.1.0' $SCRIPT_DIR/VERSION"
 run_test "CHANGELOG.md exists" "test -f $SCRIPT_DIR/CHANGELOG.md"
-run_test "install.sh has version 2.0.0" "grep -q 'Version: 2.0.0' $SCRIPT_DIR/install.sh"
-run_test "install.sh VERSION variable" "grep -q 'VERSION=\"2.0.0\"' $SCRIPT_DIR/install.sh"
+run_test "install.sh reads VERSION file" "grep -q 'VERSION=\$(cat' $SCRIPT_DIR/install.sh"
+run_test "setup-global.sh reads VERSION" "grep -q 'VERSION=\$(cat' $SCRIPT_DIR/setup-global.sh"
 echo ""
 
 # Component count validation
