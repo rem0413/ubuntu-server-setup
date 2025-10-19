@@ -226,3 +226,108 @@ show_summary() {
     echo -e "${CYAN}Log file:${NC} $LOG_FILE"
     echo ""
 }
+
+################################################################################
+# Version Management Utilities
+################################################################################
+
+# Get current version from VERSION file
+get_version() {
+    local script_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local version_file="$script_dir/VERSION"
+
+    if [[ -f "$version_file" ]]; then
+        cat "$version_file" | tr -d '[:space:]'
+    else
+        echo "2.0.0"
+    fi
+}
+
+# Set version in VERSION file
+set_version() {
+    local new_version="$1"
+    local script_dir="${2:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local version_file="$script_dir/VERSION"
+
+    # Validate version format (X.Y.Z)
+    if ! [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid version format. Use X.Y.Z (e.g., 2.1.0)"
+        return 1
+    fi
+
+    echo "$new_version" > "$version_file"
+    log_success "Version updated to: $new_version"
+
+    # Show files that read this version
+    echo ""
+    echo -e "${BOLD}Files using VERSION file:${NC}"
+    echo "  - install.sh"
+    echo "  - setup-global.sh"
+    echo "  - test.sh"
+    echo ""
+    echo -e "${DIM}No need to edit these files manually${NC}"
+
+    return 0
+}
+
+# Show current version
+show_version() {
+    local script_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local version=$(get_version "$script_dir")
+
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo -e "${BOLD}Ubuntu Server Setup${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo -e "${BOLD}Version:${NC} ${GREEN}$version${NC}"
+    echo -e "${BOLD}Location:${NC} $script_dir/VERSION"
+    echo -e "${CYAN}═══════════════════════════════════════${NC}"
+    echo ""
+}
+
+# Bump version (major, minor, or patch)
+bump_version() {
+    local bump_type="$1"  # major, minor, or patch
+    local script_dir="${2:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local current_version=$(get_version "$script_dir")
+
+    # Parse current version
+    local major=$(echo "$current_version" | cut -d. -f1)
+    local minor=$(echo "$current_version" | cut -d. -f2)
+    local patch=$(echo "$current_version" | cut -d. -f3)
+
+    # Bump based on type
+    case "$bump_type" in
+        major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+        minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+        patch)
+            patch=$((patch + 1))
+            ;;
+        *)
+            log_error "Invalid bump type. Use: major, minor, or patch"
+            return 1
+            ;;
+    esac
+
+    local new_version="$major.$minor.$patch"
+
+    echo ""
+    echo -e "${BOLD}Version Bump:${NC}"
+    echo -e "  Current: ${DIM}$current_version${NC}"
+    echo -e "  New:     ${GREEN}$new_version${NC}"
+    echo ""
+
+    if ask_yes_no "Update version to $new_version?" "y"; then
+        set_version "$new_version" "$script_dir"
+    else
+        log_info "Version update cancelled"
+        return 1
+    fi
+}
