@@ -498,9 +498,9 @@ EOF
     return 0
 }
 
-# Setup UFW IP Whitelist (Full VPS Access)
+# Setup UFW IP Whitelist (Multi-Tier Access Control)
 setup_ufw_whitelist() {
-    log_step "UFW IP Whitelist Configuration"
+    log_step "UFW Multi-Tier Access Control Configuration"
 
     echo ""
     echo -e "${YELLOW}${BOLD}⚠ WARNING - POTENTIAL LOCKOUT RISK ⚠${NC}"
@@ -529,22 +529,47 @@ setup_ufw_whitelist() {
     fi
 
     # Collect whitelist entries
+    # Format: "IP:TYPE:COMMENT[:PORTS]"
+    # TYPE: trusted (full access) or restricted (specific ports)
+    # PORTS: comma-separated port list (for restricted only)
     local whitelist_entries=()
 
-    echo -e "${BOLD}Add IP/Network to whitelist${NC}"
-    echo -e "${DIM}Whitelisted IPs will have FULL access to this VPS (all ports)${NC}"
+    echo -e "${BOLD}UFW Access Levels:${NC}"
+    echo -e "  ${GREEN}Trusted${NC}    - Full access to all ports (like VPN)"
+    echo -e "  ${YELLOW}Restricted${NC} - Access to specific ports/services only"
     echo ""
 
     # Auto-add current IP if detected
     if [[ -n "$current_ip" ]]; then
         if ask_yes_no "Auto-add current IP ($current_ip) to whitelist?" "y"; then
-            whitelist_entries+=("$current_ip:Current SSH")
-            log_success "Added: $current_ip (Current SSH)"
+            echo ""
+            echo -e "${BOLD}Access level for $current_ip:${NC}"
+            echo "  1) Trusted (full access)"
+            echo "  2) Restricted (specific ports only)"
+            echo ""
+            read_prompt "Choice [1]: " ip_type "1"
+
+            if [[ "$ip_type" == "1" ]]; then
+                whitelist_entries+=("$current_ip:trusted:Current SSH:")
+                log_success "Added: $current_ip (Current SSH) - Trusted"
+            else
+                local ports=""
+                read_prompt "Ports to allow (comma-separated, e.g. 22,80,443): " ports ""
+                if [[ -n "$ports" ]]; then
+                    whitelist_entries+=("$current_ip:restricted:Current SSH:$ports")
+                    log_success "Added: $current_ip (Current SSH) - Restricted to ports: $ports"
+                else
+                    log_error "No ports specified. Skipping current IP."
+                fi
+            fi
             echo ""
         fi
     fi
 
     # Manual entry loop
+    echo -e "${BOLD}Add additional IPs/Networks${NC}"
+    echo ""
+
     while true; do
         local ip=""
         read_prompt "IP/Network (CIDR format, or Enter to finish): " ip ""
@@ -566,9 +591,40 @@ setup_ufw_whitelist() {
             comment="Custom"
         fi
 
-        # Add entry
-        whitelist_entries+=("$ip:$comment")
-        log_success "Added: $ip ($comment)"
+        # Access level selection
+        echo ""
+        echo -e "${BOLD}Access level for $ip:${NC}"
+        echo "  1) Trusted (full access to all ports)"
+        echo "  2) Restricted (specific ports only)"
+        echo ""
+        read_prompt "Choice [1]: " ip_type "1"
+
+        if [[ "$ip_type" == "1" ]]; then
+            whitelist_entries+=("$ip:trusted:$comment:")
+            log_success "Added: $ip ($comment) - Trusted"
+        else
+            # Suggest common services
+            echo ""
+            echo -e "${DIM}Common services:${NC}"
+            echo -e "  SSH:        22/tcp"
+            echo -e "  HTTP:       80/tcp"
+            echo -e "  HTTPS:      443/tcp"
+            echo -e "  MongoDB:    27017/tcp"
+            echo -e "  PostgreSQL: 5432/tcp"
+            echo -e "  Redis:      6379/tcp"
+            echo ""
+
+            local ports=""
+            read_prompt "Ports to allow (comma-separated, e.g. 22,80,443): " ports ""
+
+            if [[ -n "$ports" ]]; then
+                whitelist_entries+=("$ip:restricted:$comment:$ports")
+                log_success "Added: $ip ($comment) - Restricted to ports: $ports"
+            else
+                log_error "No ports specified. Entry skipped."
+                continue
+            fi
+        fi
         echo ""
     done
 
@@ -583,12 +639,38 @@ setup_ufw_whitelist() {
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}Whitelist Summary:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    echo -e "${BOLD}Whitelisted IPs (full VPS access):${NC}"
+
+    local trusted_count=0
+    local restricted_count=0
+
+    # Show trusted IPs
+    echo -e "${GREEN}${BOLD}Trusted IPs (full access):${NC}"
     for entry in "${whitelist_entries[@]}"; do
-        local entry_ip=$(echo "$entry" | cut -d: -f1)
-        local entry_comment=$(echo "$entry" | cut -d: -f2)
-        echo -e "  ${GREEN}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment)"
+        IFS=':' read -r entry_ip entry_type entry_comment entry_ports <<< "$entry"
+        if [[ "$entry_type" == "trusted" ]]; then
+            echo -e "  ${GREEN}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment)"
+            trusted_count=$((trusted_count + 1))
+        fi
     done
+
+    if [[ $trusted_count -eq 0 ]]; then
+        echo -e "  ${DIM}(none)${NC}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}${BOLD}Restricted IPs (specific ports):${NC}"
+    for entry in "${whitelist_entries[@]}"; do
+        IFS=':' read -r entry_ip entry_type entry_comment entry_ports <<< "$entry"
+        if [[ "$entry_type" == "restricted" ]]; then
+            echo -e "  ${YELLOW}✓${NC} ${BOLD}$entry_ip${NC} ($entry_comment) → ports: $entry_ports"
+            restricted_count=$((restricted_count + 1))
+        fi
+    done
+
+    if [[ $restricted_count -eq 0 ]]; then
+        echo -e "  ${DIM}(none)${NC}"
+    fi
+
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${RED}${BOLD}FINAL WARNING:${NC}"
@@ -607,12 +689,32 @@ setup_ufw_whitelist() {
     echo ""
 
     for entry in "${whitelist_entries[@]}"; do
-        local entry_ip=$(echo "$entry" | cut -d: -f1)
-        local entry_comment=$(echo "$entry" | cut -d: -f2)
+        IFS=':' read -r entry_ip entry_type entry_comment entry_ports <<< "$entry"
 
-        # Allow full access from this IP (all ports)
-        log_info "Allowing full access from: $entry_ip"
-        ufw allow from "$entry_ip" comment "Whitelist: $entry_comment" >> "$LOG_FILE" 2>&1
+        if [[ "$entry_type" == "trusted" ]]; then
+            # Allow full access from this IP (all ports)
+            log_info "Allowing full access from: $entry_ip"
+            ufw allow from "$entry_ip" comment "Trusted: $entry_comment" >> "$LOG_FILE" 2>&1
+        else
+            # Allow specific ports only
+            log_info "Allowing restricted access from: $entry_ip (ports: $entry_ports)"
+
+            # Parse comma-separated ports
+            IFS=',' read -ra PORTS <<< "$entry_ports"
+            for port in "${PORTS[@]}"; do
+                # Trim whitespace
+                port=$(echo "$port" | xargs)
+
+                # Detect protocol (default tcp)
+                local proto="tcp"
+                if [[ "$port" == *"/"* ]]; then
+                    proto=$(echo "$port" | cut -d/ -f2)
+                    port=$(echo "$port" | cut -d/ -f1)
+                fi
+
+                ufw allow from "$entry_ip" to any port "$port" proto "$proto" comment "Restricted: $entry_comment" >> "$LOG_FILE" 2>&1
+            done
+        fi
     done
 
     # Change default policy to deny
@@ -624,14 +726,14 @@ setup_ufw_whitelist() {
     # Reload UFW
     ufw reload >> "$LOG_FILE" 2>&1
 
-    log_success "UFW whitelist configured successfully"
+    log_success "UFW multi-tier access control configured successfully"
 
     # Show final status
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo -e "${BOLD}UFW Status:${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
-    ufw status numbered | head -20
+    ufw status numbered
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
     echo -e "${YELLOW}${BOLD}IMPORTANT - TEST YOUR ACCESS NOW:${NC}"
@@ -647,7 +749,8 @@ setup_ufw_whitelist() {
     echo -e "${BOLD}Management Commands:${NC}"
     echo -e "  Status:      ${CYAN}sudo ufw status numbered${NC}"
     echo -e "  Delete rule: ${CYAN}sudo ufw delete <number>${NC}"
-    echo -e "  Add IP:      ${CYAN}sudo ufw allow from <IP>${NC}"
+    echo -e "  Add trusted: ${CYAN}sudo ufw allow from <IP>${NC}"
+    echo -e "  Add port:    ${CYAN}sudo ufw allow from <IP> to any port <PORT>${NC}"
     echo -e "  Disable:     ${CYAN}sudo ufw disable${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""

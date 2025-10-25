@@ -169,6 +169,10 @@ UFW (Uncomplicated Firewall) automatically configured with:
 - HTTP/HTTPS (if Nginx installed)
 - OpenVPN (if installed)
 - Custom rules support
+- **Multi-tier IP access control:**
+  - **Trusted IPs**: Full access to all ports (VPN-like access)
+  - **Restricted IPs**: Access to specific ports/services only
+  - Default deny all incoming with granular IP whitelisting
 
 ## Service Configuration
 
