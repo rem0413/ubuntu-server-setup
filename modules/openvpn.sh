@@ -214,7 +214,7 @@ EOF
 
     # Configure firewall
     if command -v ufw &>/dev/null; then
-        log_info "Configuring firewall..."
+        log_info "Configuring firewall for OpenVPN..."
 
         # Get default network interface
         local iface=$(ip route | grep default | awk '{print $5}' | head -1)
@@ -236,11 +236,24 @@ EOF
         # Insert NAT rules at the beginning
         cat /etc/ufw/before.rules.openvpn /etc/ufw/before.rules.backup > /etc/ufw/before.rules
 
-        # Allow OpenVPN through firewall
-        ufw allow "$vpn_port/$vpn_protocol" >> /var/log/ubuntu-setup.log 2>&1
+        # Enable routing/forwarding in UFW
+        log_info "Enabling UFW routing..."
+        ufw default allow routed >> /var/log/ubuntu-setup.log 2>&1
+        log_success "UFW routing enabled"
+
+        # Allow OpenVPN port
+        log_info "Opening OpenVPN port $vpn_port/$vpn_protocol..."
+        ufw allow "$vpn_port/$vpn_protocol" comment 'OpenVPN' >> /var/log/ubuntu-setup.log 2>&1
+
+        # Allow VPN clients full access (trusted network)
+        log_info "Allowing VPN subnet 10.8.0.0/24 (trusted)..."
+        ufw allow from 10.8.0.0/24 comment 'Trusted: VPN Clients' >> /var/log/ubuntu-setup.log 2>&1
+        log_success "VPN clients can route traffic through server"
 
         # Reload firewall
         ufw --force reload >> /var/log/ubuntu-setup.log 2>&1
+
+        log_success "UFW configured for OpenVPN routing"
     fi
 
     # Enable and start OpenVPN
@@ -295,6 +308,12 @@ EOF
     echo -e "${BOLD}VPN Network:${NC} 10.8.0.0/24"
     echo -e "${BOLD}DNS:${NC} $dns1 $dns2"
     echo ""
+    echo -e "${BOLD}Firewall Configuration:${NC}"
+    echo -e "  ${GREEN}✓${NC} UFW routing enabled (default allow routed)"
+    echo -e "  ${GREEN}✓${NC} OpenVPN port $vpn_port/$vpn_protocol allowed"
+    echo -e "  ${GREEN}✓${NC} VPN subnet 10.8.0.0/24 trusted (full access)"
+    echo -e "  ${GREEN}✓${NC} NAT/Masquerade configured for Internet routing"
+    echo ""
     echo -e "${BOLD}Next Steps:${NC}"
     echo -e "  1. Add VPN clients: Re-run installer and select OpenVPN option"
     echo -e "  2. Download .ovpn files from: ${CYAN}$client_dir/files/${NC}"
@@ -304,6 +323,7 @@ EOF
     echo -e "  Status: ${CYAN}sudo systemctl status openvpn-server@server${NC}"
     echo -e "  Logs: ${CYAN}sudo journalctl -u openvpn-server@server -f${NC}"
     echo -e "  Connected clients: ${CYAN}sudo cat /var/log/openvpn/openvpn-status.log${NC}"
+    echo -e "  UFW status: ${CYAN}sudo ufw status verbose${NC}"
     echo -e "${CYAN}═══════════════════════════════════════${NC}"
     echo ""
 
@@ -316,6 +336,12 @@ OpenVPN Server:
   Protocol: $vpn_protocol
   VPN Network: 10.8.0.0/24
   Client configs: $client_dir/files/
+
+  Firewall:
+    - UFW routing: enabled (default allow routed)
+    - OpenVPN port: $vpn_port/$vpn_protocol allowed
+    - VPN subnet: 10.8.0.0/24 trusted (full access)
+    - NAT/Masquerade: configured
 
 EOF
 
