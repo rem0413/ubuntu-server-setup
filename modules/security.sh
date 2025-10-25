@@ -684,7 +684,15 @@ setup_ufw_whitelist() {
         return 0
     fi
 
-    # Apply UFW rules
+    # Set default policy to deny FIRST (before adding whitelist rules)
+    echo ""
+    log_info "Setting default policy to DENY all incoming..."
+    ufw default deny incoming >> "$LOG_FILE" 2>&1
+    ufw default allow outgoing >> "$LOG_FILE" 2>&1
+    log_success "Default policy set: DENY incoming, ALLOW outgoing"
+
+    # Apply UFW whitelist rules
+    echo ""
     log_info "Applying UFW whitelist rules..."
     echo ""
 
@@ -716,12 +724,6 @@ setup_ufw_whitelist() {
             done
         fi
     done
-
-    # Change default policy to deny
-    echo ""
-    log_info "Setting default policy to DENY incoming..."
-    ufw default deny incoming >> "$LOG_FILE" 2>&1
-    ufw default allow outgoing >> "$LOG_FILE" 2>&1
 
     # Reload UFW
     ufw reload >> "$LOG_FILE" 2>&1
