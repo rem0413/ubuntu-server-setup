@@ -784,6 +784,17 @@ setup_sftp_user() {
         echo "Subsystem sftp internal-sftp" >> "$sshd_config"
     fi
 
+    # Add user to AllowUsers if directive exists
+    if grep -q "^AllowUsers" "$sshd_config"; then
+        if ! grep "^AllowUsers" "$sshd_config" | grep -q "$sftp_user"; then
+            log_info "Adding $sftp_user to AllowUsers..."
+            sed -i "s/^AllowUsers.*/& $sftp_user/" "$sshd_config"
+            log_success "User added to AllowUsers"
+        else
+            log_info "User already in AllowUsers"
+        fi
+    fi
+
     # Add Match User block for chroot
     if ! grep -q "Match User $sftp_user" "$sshd_config"; then
         cat >> "$sshd_config" << EOF
